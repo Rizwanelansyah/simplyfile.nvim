@@ -1,6 +1,7 @@
 # simplyfile.nvim
 simple file explorer plugin for neovim
-![Preview](https://github.com/Rizwanelansyah/simplyfile.nvim/raw/master/preview.png "Preview")
+
+![Preview](https://raw.githubusercontent.com/Rizwanelansyah/simplyfile.nvim/main/preview.png "Preview")
 
 ## requirements
 - neovim 0.9.5 or higher
