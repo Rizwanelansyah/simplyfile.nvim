@@ -44,8 +44,8 @@ require("simplyfile").setup {
 ```
 
 ## usages
-- `:SimplyFileOpen [path/to/folder]` open the explorer or use `open(path)`
-- `:SimplyFileClose` close the explorer or use `close()`
+- `:SimplyFileOpen` open the explorer or `require("simplyfile").open()`
+- `:SimplyFileClose` close the explorer or `require("simplyfile").close()`
 
 ## TODO:
 <input type="checkbox" disabled> clipboards <br>
