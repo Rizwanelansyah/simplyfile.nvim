@@ -1,0 +1,151 @@
+local M = {}
+
+---get devicon highlight
+local function get_highlight_name(data)
+  if not data.name then
+    return "Normal"
+  end
+
+  return "DevIcon" .. data.name
+end
+
+---@class SimplyFile.Directory
+---@field name string name of the directory
+---@field absolute string absolute path of the directory
+---@field is_folder boolean true if the directory is folder otherwise false
+---@field icon string nerd fonts icon that represent the directory
+---@field hl string hl name of the directory icon
+---@field filetype string filetype if its a file
+
+---get all directory on {path}
+---@param path string path to folder
+---@return SimplyFile.Directory[] # return a table that contains all diretory or an emty table
+function M.dirs(path)
+  local dirs = {}
+  local files = {}
+  local icons_by_filename = {}
+  local icons_by_extension = {}
+  local devicon = require("nvim-web-devicons")
+
+  if devicon then
+    icons_by_filename = devicon.get_icons_by_filename()
+    icons_by_extension = devicon.get_icons_by_extension()
+  end
+
+  if vim.fn.isdirectory(path) then
+    for name, type in vim.fs.dir(path, { depth = 1 }) do
+      local icon = icons_by_filename[name] or icons_by_extension[vim.filetype.match { filename = name }]
+      local hl = "Normal"
+      local filetype = vim.filetype.match { filename = name }
+      if devicon and icon then
+        hl = get_highlight_name(icon)
+      else
+        icon = {
+          icon = "",
+        }
+      end
+
+      local is_folder = false
+      if type == 'directory' then
+        is_folder = true
+        icon = {
+          icon = "",
+        }
+        hl = "Directory"
+        filetype = 'directory'
+      end
+
+      if is_folder then
+        table.insert(dirs, {
+          name = name,
+          absolute = vim.fs.normalize(path) .. "/" .. name,
+          is_folder = is_folder,
+          icon = icon.icon,
+          hl = hl,
+          filetype = filetype,
+        })
+      else
+        table.insert(files, {
+          name = name,
+          absolute = vim.fs.normalize(path) .. "/" .. name,
+          is_folder = is_folder,
+          icon = icon.icon,
+          hl = hl,
+          filetype = filetype,
+        })
+      end
+    end
+  end
+
+  for _, file in ipairs(files) do
+    table.insert(dirs, file)
+  end
+
+  return dirs
+end
+
+function M.trim_dot(path)
+  local split = vim.split(path, "/", { trimempty = true })
+  local new_path = {}
+  for _, dir in ipairs(split) do
+    if dir == ".." then
+      table.remove(new_path, #new_path)
+    elseif dir == "." then
+    else
+      table.insert(new_path, dir)
+    end
+  end
+  if #new_path < 1 then
+    return "/"
+  end
+
+  local str = ""
+  for _, dir in ipairs(new_path) do
+    str = str .. "/" .. dir
+  end
+  return str
+end
+
+---return the {value} percent of {max}
+---@param value integer
+---@param max integer
+---@return integer
+function M.percent_of(value, max)
+  return math.floor(max * (value / 100))
+end
+
+---check the file is exists or not
+---@param name string path to the file
+---@return boolean?
+function M.file_exists(name)
+  local f = io.open(name, "r")
+  return f ~= nil and io.close(f)
+end
+
+---open a new window
+---@param width integer
+---@param height integer
+---@param row integer
+---@param col integer
+---@param buf integer bufnr
+---@param enter boolean enter to window or not
+---@return integer # widow_handle
+function M.open_win(width, height, row, col, buf, enter)
+  return vim.api.nvim_open_win(buf, enter, {
+    width = width,
+    height = height,
+    row = row,
+    col = col,
+    relative = 'editor',
+    style = 'minimal',
+    border = 'single',
+  })
+end
+
+function M.win_edit_config(win, additional_config)
+  local config = vim.api.nvim_win_get_config(win)
+  config = vim.tbl_extend("force", config, additional_config)
+  vim.api.nvim_win_set_config(win, config)
+end
+
+return M
