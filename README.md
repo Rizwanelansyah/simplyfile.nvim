@@ -41,6 +41,7 @@ require("simplyfile").setup {
 ## usages
 - `:SimplyFileOpen` open the explorer or `require("simplyfile").open()`
 - `:SimplyFileClose` close the explorer or `require("simplyfile").close()`
+- check the [wiki pages](https://github.com/Rizwanelansyah/simplyfile.nvim/wiki) for more info
 
 ## TODO:
 - ❌ clipboards
