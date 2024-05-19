@@ -38,7 +38,10 @@ function M.setup(opts)
   if vim.g.simplyfile_config.open_on_enter then
     vim.api.nvim_create_autocmd("VimEnter", {
       callback = function()
-        M.open()
+        local path = vim.api.nvim_buf_get_name(0)
+        if vim.fn.getfsize(path) == 0 then
+          M.open(path)
+        end
       end
     })
   end
