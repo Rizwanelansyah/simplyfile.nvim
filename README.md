@@ -9,14 +9,9 @@ simple file explorer plugin for neovim
 - (optional) [nvim-tree-webdevicons](https://github.com/nvim-tree/nvim-web-devicons)
 
 ## installation
-With [packer.nvim](https://github.com/wbthomason/packer.nvim)
-```lua
-use 'Rizwanelansyah/simplyfile.nvim'
-```
-
 With [lazy.nvim](https://github.com/folke/lazy.nvim)
 ```lua
-{ 'Rizwanelansyah/simplyfile.nvim' }
+{ 'Rizwanelansyah/simplyfile.nvim', tag = 'v0.1' }
 ```
 
 ## config
