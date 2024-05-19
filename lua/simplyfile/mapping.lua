@@ -8,12 +8,19 @@ function M.open(dir)
   if dir.is_folder then
     local main = vim.g.simplyfile_explorer.main
     local left = vim.g.simplyfile_explorer.left
-    local dirs = util.dirs(dir.absolute)
+    local search = vim.g.simplyfile_explorer.search
+    local dirs = {}
+    for _, dir in ipairs(util.dirs(dir.absolute)) do
+      if dir.name:match(search) then
+        table.insert(dirs, dir)
+      end
+    end
     vim.g.simplyfile_explorer = vim.tbl_extend("force", vim.g.simplyfile_explorer, {
       dirs = dirs,
       path = dir.absolute,
     })
 
+    util.buf_unlocks(main.buf, left.buf)
     vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
     vim.api.nvim_buf_set_lines(main.buf, 0, -1, false, { "" })
     for c, d in ipairs(dirs) do
@@ -32,6 +39,7 @@ function M.open(dir)
     end
 
     util.win_edit_config(main.win, { title = " " .. dir.name })
+    util.buf_locks(main.buf, left.buf)
   else
     vim.cmd [[ SimplyFileClose ]]
     vim.cmd("e " .. dir.absolute)
@@ -43,13 +51,21 @@ function M.go_to_parent()
   local main = vim.g.simplyfile_explorer.main
   local left = vim.g.simplyfile_explorer.left
   local path = vim.g.simplyfile_explorer.path
+  local search = vim.g.simplyfile_explorer.search
   local parent = vim.fs.dirname(path)
-  local dirs = util.dirs(parent)
+  local dirs = {}
+  for _, dir in ipairs(util.dirs(parent)) do
+    if dir.name:match(search) then
+      table.insert(dirs, dir)
+    end
+  end
+
   vim.g.simplyfile_explorer = vim.tbl_extend("force", vim.g.simplyfile_explorer, {
     path = parent,
     dirs = dirs,
   })
 
+  util.buf_unlocks(main.buf, left.buf)
   vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
   vim.api.nvim_buf_set_lines(main.buf, 0, -1, false, { "" })
   for c, d in ipairs(dirs) do
@@ -71,6 +87,7 @@ function M.go_to_parent()
   end
 
   util.win_edit_config(main.win, { title = " " .. vim.fs.basename(parent) })
+  util.buf_locks(main.buf, left.buf)
 end
 
 ---add new file/folder to current directory
@@ -124,25 +141,103 @@ function M.delete(dir)
     end)
 end
 
+function M.search()
+  local config = vim.api.nvim_win_get_config(vim.g.simplyfile_explorer.up.win)
+  local buf = vim.api.nvim_create_buf(true, true)
+  local win = vim.api.nvim_open_win(buf, true, config)
+  local ns = vim.api.nvim_create_namespace("SimplyFile")
+  local text = "Search For: "
+
+  vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
+    id = 1,
+    end_row = 0,
+    end_col = 0,
+    virt_text = { { text, "Normal" } },
+    virt_text_pos = "inline",
+    right_gravity = false,
+  })
+
+  local close = function()
+    vim.cmd.stopinsert()
+    vim.api.nvim_win_close(win, true)
+    vim.api.nvim_buf_del_extmark(buf, ns, 1)
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end
+
+  vim.api.nvim_buf_set_keymap(buf, "i", "<ESC>", "", {
+    callback = close
+  })
+  vim.api.nvim_buf_set_keymap(buf, "i", "<CR>", "", {
+    callback = function()
+      local input = vim.api.nvim_get_current_line()
+      local up = vim.g.simplyfile_explorer.up.buf
+
+      util.buf_unlocks(up)
+      if input == "" then
+        vim.api.nvim_buf_set_lines(up, 0, -1, false, { "" })
+      else
+        vim.api.nvim_buf_set_lines(up, 0, -1, false, { text .. input })
+      end
+      util.buf_locks(up)
+
+      local new_dirs = {}
+      for _, dir in ipairs(util.dirs(vim.g.simplyfile_explorer.path)) do
+        if dir.name:match(input) then
+          table.insert(new_dirs, dir)
+        end
+      end
+
+      vim.g.simplyfile_explorer = vim.tbl_extend('force', vim.g.simplyfile_explorer, {
+        dirs = new_dirs,
+        search = input,
+      })
+      ---@diagnostic disable-next-line: missing-fields
+      M.redraw { absolute = "" }
+      close()
+    end
+  })
+
+  vim.api.nvim_set_current_line(vim.g.simplyfile_explorer.search)
+
+  vim.cmd(("setlocal nocursorline nonumber"):format(#text, #text))
+  vim.cmd("startinsert!")
+end
+
 ---Refresh SimplyFile explorer
 ---@param dir SimplyFile.Directory start cursor on this directory
 function M.refresh(dir)
   if not dir then return end
-  local main = vim.g.simplyfile_explorer.main
-  local left = vim.g.simplyfile_explorer.left
   local path = vim.g.simplyfile_explorer.path
-  local dirs = util.dirs(path)
+  local search = vim.g.simplyfile_explorer.search
+  local dirs = {}
+  for _, dir in ipairs(util.dirs(path)) do
+    if dir.name:match(search) then
+      table.insert(dirs, dir)
+    end
+  end
   vim.g.simplyfile_explorer = vim.tbl_extend("force", vim.g.simplyfile_explorer, {
     dirs = dirs,
   })
+  M.redraw(dir)
+end
 
+---Redraw the ui
+---@param dir SimplyFile.Directory start cursor on this directory
+function M.redraw(dir)
+  if not dir then return end
+  local main = vim.g.simplyfile_explorer.main
+  local left = vim.g.simplyfile_explorer.left
+  local path = vim.g.simplyfile_explorer.path
+  local dirs = vim.g.simplyfile_explorer.dirs
+
+  util.buf_unlocks(main.buf, left.buf)
   vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
   vim.api.nvim_buf_set_lines(main.buf, 0, -1, false, { "" })
-  for i, d in ipairs(dirs) do
-    vim.api.nvim_buf_set_lines(main.buf, i - 1, i, false, { "  " .. d.icon .. " " .. d.name })
-    vim.api.nvim_buf_add_highlight(main.buf, 0, d.hl, i - 1, 0, 5)
+  for c, d in ipairs(dirs) do
+    vim.api.nvim_buf_set_lines(main.buf, c - 1, c, false, { "  " .. d.icon .. " " .. d.name })
+    vim.api.nvim_buf_add_highlight(main.buf, 0, d.hl, c - 1, 0, 5)
     if d.absolute == dir.absolute then
-      vim.api.nvim_win_set_cursor(main.win, { i, 0 })
+      vim.api.nvim_win_set_cursor(main.win, { c, 0 })
     end
   end
 
@@ -156,16 +251,20 @@ function M.refresh(dir)
     end
   end
 
-  util.win_edit_config(main.win, { title = " " .. path })
+  util.win_edit_config(main.win, { title = " " .. vim.fs.basename(path) })
+  util.buf_locks(main.buf, left.buf)
 end
 
 M.default = {
   ["<ESC>"] = function() vim.cmd("SimplyFileClose") end,
   ["<Right>"] = M.open,
   ["<Left>"] = M.go_to_parent,
+  l = M.open,
+  h = M.go_to_parent,
   a = M.add,
   r = M.rename,
   d = M.delete,
+  s = M.search,
 }
 
 return M

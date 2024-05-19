@@ -148,4 +148,30 @@ function M.win_edit_config(win, additional_config)
   vim.api.nvim_win_set_config(win, config)
 end
 
+---set readonly and not modifiable on buffers
+---@param ... integer
+function M.buf_locks(...)
+  for _, bufnr in ipairs({ ... }) do
+    vim.api.nvim_set_option_value("modifiable", false, { buf = bufnr })
+    vim.api.nvim_set_option_value("readonly", true, { buf = bufnr })
+  end
+end
+
+---set not readonly and modifiable on buffers
+---@param ... integer
+function M.buf_unlocks(...)
+  for _, bufnr in ipairs({ ... }) do
+    vim.api.nvim_set_option_value("modifiable", true, { buf = bufnr })
+    vim.api.nvim_set_option_value("readonly", false, { buf = bufnr })
+  end
+end
+
+function M.callget(value, ...)
+  if type(value) == "function" then
+    return value(...)
+  else
+    return value
+  end
+end
+
 return M

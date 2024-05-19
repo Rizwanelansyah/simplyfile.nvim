@@ -48,7 +48,7 @@ require("simplyfile").setup {
 - `:SimplyFileClose` close the explorer or `require("simplyfile").close()`
 
 ## TODO:
-- \[X\] clipboards
-- \[X\] search bar
-- \[X\] filter
-- \[X\] sort
+- ❌ clipboards
+- ✅ search bar
+- ❌ filter
+- ❌ sort
