@@ -11,7 +11,7 @@ simple file explorer plugin for neovim
 ## installation
 With [lazy.nvim](https://github.com/folke/lazy.nvim)
 ```lua
-{ 'Rizwanelansyah/simplyfile.nvim', tag = 'v0.1' }
+{ 'Rizwanelansyah/simplyfile.nvim', tag = 'v0.2' }
 ```
 
 ## config
@@ -44,7 +44,7 @@ require("simplyfile").setup {
 - check the [wiki pages](https://github.com/Rizwanelansyah/simplyfile.nvim/wiki) for more info
 
 ## TODO:
-- ❌ clipboards
+- ✅ clipboard
 - ✅ search bar
 - ❌ filter
 - ❌ sort

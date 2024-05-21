@@ -118,6 +118,7 @@ function M.open(path)
     path = path,
     group_id = vim.api.nvim_create_augroup("SimplyFile", {}),
     search = "",
+    mode = nil,
   }
 
   for c, dir in ipairs(dirs) do
@@ -129,11 +130,12 @@ function M.open(path)
   end
 
   local parent_dirs = util.dirs(vim.fs.dirname(path))
-  for c, dir in ipairs(parent_dirs) do
-    vim.api.nvim_buf_set_lines(left.buf, c - 1, c, false, { "  " .. dir.icon .. " " .. dir.name })
-    vim.api.nvim_buf_add_highlight(left.buf, 0, dir.hl, c - 1, 0, 5)
+  for i, dir in ipairs(parent_dirs) do
+    vim.api.nvim_buf_set_lines(left.buf, i - 1, i, false, { "  " .. dir.icon .. " " .. dir.name })
+    vim.api.nvim_buf_add_highlight(left.buf, 0, dir.hl, i - 1, 0, 5)
     if dir.absolute == path then
-      vim.api.nvim_buf_add_highlight(left.buf, 0, "CursorLine", c - 1, 0, -1)
+      vim.api.nvim_buf_add_highlight(left.buf, 0, "CursorLine", i - 1, 0, -1)
+      vim.api.nvim_win_set_cursor(left.win, { i, 0 })
     end
   end
 

@@ -46,10 +46,10 @@ function M.dirs(path)
       end
 
       local is_folder = false
-      if type == 'directory' then
+      if type == 'directory' or type == 'link' then
         is_folder = true
         icon = {
-          icon = "",
+          icon = type == 'directory' and "" or "󱅷",
         }
         hl = "Directory"
         filetype = 'directory'

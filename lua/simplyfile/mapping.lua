@@ -1,5 +1,6 @@
 local M = {}
 local util = require("simplyfile.util")
+local clipboard = require("simplyfile.clipboard")
 
 ---open folder or file
 ---@param dir SimplyFile.Directory
@@ -35,6 +36,7 @@ function M.open(dir)
       vim.api.nvim_buf_add_highlight(left.buf, 0, d.hl, i - 1, 0, 5)
       if d.absolute == dir.absolute then
         vim.api.nvim_buf_add_highlight(left.buf, 0, "CursorLine", i - 1, 0, -1)
+        vim.api.nvim_win_set_cursor(left.win, { i, 0 })
       end
     end
 
@@ -68,11 +70,11 @@ function M.go_to_parent()
   util.buf_unlocks(main.buf, left.buf)
   vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
   vim.api.nvim_buf_set_lines(main.buf, 0, -1, false, { "" })
-  for c, d in ipairs(dirs) do
-    vim.api.nvim_buf_set_lines(main.buf, c - 1, c, false, { "  " .. d.icon .. " " .. d.name })
-    vim.api.nvim_buf_add_highlight(main.buf, 0, d.hl, c - 1, 0, 5)
+  for i, d in ipairs(dirs) do
+    vim.api.nvim_buf_set_lines(main.buf, i - 1, i, false, { "  " .. d.icon .. " " .. d.name })
+    vim.api.nvim_buf_add_highlight(main.buf, 0, d.hl, i - 1, 0, 5)
     if d.absolute == path then
-      vim.api.nvim_win_set_cursor(main.win, { c, 0 })
+      vim.api.nvim_win_set_cursor(main.win, { i, 0 })
     end
   end
 
@@ -83,6 +85,7 @@ function M.go_to_parent()
     vim.api.nvim_buf_add_highlight(left.buf, 0, d.hl, i - 1, 0, 5)
     if d.absolute == parent then
       vim.api.nvim_buf_add_highlight(left.buf, 0, "CursorLine", i - 1, 0, -1)
+      vim.api.nvim_win_set_cursor(left.win, { i, 0 })
     end
   end
 
@@ -131,12 +134,14 @@ end
 ---@param dir SimplyFile.Directory
 function M.delete(dir)
   if not dir then return end
+  local pos = vim.api.nvim_win_get_cursor(0)
   vim.ui.select({ "No", "Yes" },
     { prompt = "Are You Sure Wanna Delete '" .. dir.icon .. " " .. dir.name .. "' Permanently? " }, function(item)
       if item == "Yes" then
         os.remove(dir.absolute)
         ---@diagnostic disable-next-line: missing-fields
         M.refresh { absolute = "" }
+        vim.api.nvim_win_set_cursor(0, { pos[1] > 1 and pos[1] - 1 or 1, pos[2] })
       end
     end)
 end
@@ -152,7 +157,7 @@ function M.search()
     id = 1,
     end_row = 0,
     end_col = 0,
-    virt_text = { { text, "Normal" } },
+    virt_text = { { text, "@field" } },
     virt_text_pos = "inline",
     right_gravity = false,
   })
@@ -174,9 +179,16 @@ function M.search()
 
       util.buf_unlocks(up)
       if input == "" then
-        vim.api.nvim_buf_set_lines(up, 0, -1, false, { "" })
+        vim.api.nvim_buf_del_extmark(up, ns, 1)
       else
-        vim.api.nvim_buf_set_lines(up, 0, -1, false, { text .. input })
+        vim.api.nvim_buf_set_extmark(up, ns, 0, 0, {
+          id = 1,
+          end_row = 0,
+          end_col = 0,
+          virt_text = { { text, "@field" }, { input, "@string" } },
+          virt_text_pos = "inline",
+          right_gravity = false,
+        })
       end
       util.buf_locks(up)
 
@@ -199,8 +211,32 @@ function M.search()
 
   vim.api.nvim_set_current_line(vim.g.simplyfile_explorer.search)
 
-  vim.cmd(("setlocal nocursorline nonumber"):format(#text, #text))
+  vim.cmd("setlocal nocursorline nonumber")
   vim.cmd("startinsert!")
+end
+
+function M.paste(dir)
+  local dest = vim.g.simplyfile_explorer.path
+  clipboard.paste_last(dest, function()
+    if dir then
+      M.refresh(dir)
+    else
+      ---@diagnostic disable-next-line: missing-fields
+      M.refresh { absolute = "" }
+    end
+  end)
+end
+
+function M.paste_select(dir)
+  local dest = vim.g.simplyfile_explorer.path
+  clipboard.paste_select(dest, function()
+    if dir then
+      M.refresh(dir)
+    else
+      ---@diagnostic disable-next-line: missing-fields
+      M.refresh { absolute = "" }
+    end
+  end)
 end
 
 ---Refresh SimplyFile explorer
@@ -248,6 +284,7 @@ function M.redraw(dir)
     vim.api.nvim_buf_add_highlight(left.buf, 0, d.hl, i - 1, 0, 5)
     if d.absolute == path then
       vim.api.nvim_buf_add_highlight(left.buf, 0, "CursorLine", i - 1, 0, -1)
+      vim.api.nvim_win_set_cursor(left.win, { i, 0 })
     end
   end
 
@@ -265,6 +302,10 @@ M.default = {
   r = M.rename,
   d = M.delete,
   s = M.search,
+  c = clipboard.copy,
+  x = clipboard.cut,
+  v = M.paste,
+  V = M.paste_select,
 }
 
 return M
