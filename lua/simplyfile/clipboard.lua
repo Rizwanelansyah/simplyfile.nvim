@@ -1,7 +1,7 @@
 local M = {}
 local util = require("simplyfile.util")
 
----@alias SimplyFile.ClipboardRegister { method: 'copy' | 'cut', dir: SimplyFile.Directory }
+---@alias SimplyFile.ClipboardRegister { method: 'copy' | 'cut', dir: SimplyFile.Directory, id: integer }
 
 ---@type SimplyFile.ClipboardRegister[]
 M.registers = {}
@@ -18,12 +18,20 @@ function M.contain(dir)
   return false
 end
 
+function M.create_id()
+  if #M.registers < 1 then
+    return 1
+  else
+    return M.registers[#M.registers].id + 1
+  end
+end
+
 ---copy file/folder to clipboard entry
 ---@param dir SimplyFile.Directory
 function M.copy(dir)
   if not dir then return end
   if M.contain(dir) then return end
-  table.insert(M.registers, { method = 'copy', dir = dir } --[[@as SimplyFile.ClipboardRegister]])
+  table.insert(M.registers, { method = 'copy', dir = dir, id = M.create_id() } --[[@as SimplyFile.ClipboardRegister]])
 end
 
 ---cut file/folder to clipboard entry
@@ -31,7 +39,7 @@ end
 function M.cut(dir)
   if not dir then return end
   if M.contain(dir) then return end
-  table.insert(M.registers, { method = 'cut', dir = dir } --[[@as SimplyFile.ClipboardRegister]])
+  table.insert(M.registers, { method = 'cut', dir = dir, id = M.create_id() } --[[@as SimplyFile.ClipboardRegister]])
 end
 
 ---paste {entry} to {dest}
@@ -102,7 +110,7 @@ function M.paste_select(dest, after)
   for i, reg in ipairs(M.registers) do
     vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { "  " })
     vim.api.nvim_buf_set_extmark(buf, ns, i - 1, 0, {
-      id = i,
+      id = reg.id,
       end_row = i - 1,
       end_col = 0,
       virt_text = { { reg.method, "@method" }, spc, { reg.dir.icon, reg.dir.hl }, spc, { reg.dir.absolute, "@string" } },
@@ -119,8 +127,8 @@ function M.paste_select(dest, after)
   vim.api.nvim_buf_set_keymap(buf, 'n', 'd', "", {
     callback = function()
       local row = vim.api.nvim_win_get_cursor(0)[1]
-      table.remove(M.registers, row)
-      vim.api.nvim_buf_del_extmark(buf, ns, row)
+      local reg = table.remove(M.registers, row)
+      vim.api.nvim_buf_del_extmark(buf, ns, reg.id)
       vim.api.nvim_del_current_line()
     end
   })
