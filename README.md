@@ -2,6 +2,7 @@
 simple file explorer plugin for neovim
 
 ![Preview](https://raw.githubusercontent.com/Rizwanelansyah/simplyfile.nvim/main/preview.png "Preview")
+[![Img Preview](https://asciinema.org/a/660516.svg)](https://asciinema.org/a/660516)
 
 ## requirements
 - neovim 0.9.5 or higher
