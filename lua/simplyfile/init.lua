@@ -57,14 +57,15 @@ function M.setup(opts)
       end
     },
     default_sort = function(dirA, dirB)
+      local a = dirA.name
+      local b = dirB.name
       if dirA.is_folder then
-        if dirA.is_folder and not dirB.is_folder then
-          return 1 < 0
-        elseif not dirA.is_folder and dirB.is_folder then
-          return 0 < 1
-        end
+        a = "..." .. a
       end
-      return dirA.name < dirB.name
+      if dirB.is_folder then
+        b = "..." .. b
+      end
+      return a < b
     end,
   } --[[@as SimplyFile.Opts]])
 

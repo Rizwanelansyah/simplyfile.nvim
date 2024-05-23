@@ -52,21 +52,23 @@ function M.filter_dirs()
 
     local ns = vim.api.nvim_create_namespace("SimplyFile")
     local up = vim.g.simplyfile_explorer.up.buf
-    if type(vim.g.simplyfile_explorer.filter) ~= "string" then
+    if type(vim.g.simplyfile_explorer.filter) ~= "string" and not vim.g.simplyfile_explorer.reverse_filter then
       vim.api.nvim_buf_del_extmark(up, ns, 1)
       return
     end
 
     util.buf_unlocks(up)
     local virt_text = {}
-    table.insert(virt_text, { "Filter: ", "@field" })
+    table.insert(virt_text, { " : ", "@field" })
 
     if vim.g.simplyfile_explorer.reverse_filter then
       table.insert(virt_text, { "reversed ", "@keyword" })
     end
 
-    local filter_name = vim.g.simplyfile_explorer.filter
-    table.insert(virt_text, { filter_name, "@string" })
+    if type(vim.g.simplyfile_explorer.filter) == "string" then
+      local filter_name = vim.g.simplyfile_explorer.filter
+      table.insert(virt_text, { filter_name, "@string" })
+    end
 
     vim.api.nvim_buf_set_extmark(up, ns, 0, 0, {
       id = 1,
@@ -93,7 +95,7 @@ function M.search_dirs()
     if type(vim.g.simplyfile_explorer.filter) == "string" then
       table.insert(virt_text, { " | ", "FloatBorder" })
     end
-    table.insert(virt_text, { "Search: ", "@field" })
+    table.insert(virt_text, { " : ", "@field" })
     table.insert(virt_text, { search, "@string" })
     vim.api.nvim_buf_set_extmark(up, ns, 0, 0, {
       id = 2,
@@ -123,9 +125,12 @@ function M.sort_dirs()
   local sort = M.get_sort()
   local dirs = vim.g.simplyfile_explorer.dirs
   if vim.g.simplyfile_explorer.reverse_sort then
-    table.sort(dirs, function(a, b)
-      return not sort(a, b)
-    end)
+    table.sort(dirs, sort)
+    local new_dirs = {}
+    for _, dir in ipairs(dirs) do
+      table.insert(new_dirs, 1, dir)
+    end
+    dirs = new_dirs
   else
     table.sort(dirs, sort)
   end
@@ -133,24 +138,26 @@ function M.sort_dirs()
 
   local ns = vim.api.nvim_create_namespace("SimplyFile")
   local up = vim.g.simplyfile_explorer.up.buf
-  if type(vim.g.simplyfile_explorer.sort) ~= "string" then
+  if type(vim.g.simplyfile_explorer.sort) ~= "string" and not vim.g.simplyfile_explorer.reverse_sort then
     vim.api.nvim_buf_del_extmark(up, ns, 3)
     return
   end
 
   util.buf_unlocks(up)
   local virt_text = {}
-  if vim.g.simplyfile_explorer.search ~= "" or type(vim.g.simplyfile_explorer.filter) == "string" then
+  if vim.g.simplyfile_explorer.search ~= "" or (type(vim.g.simplyfile_explorer.filter) == "string" or vim.g.simplyfile_explorer.reverse_filter) then
     table.insert(virt_text, { " | ", "FloatBorder" })
   end
-  table.insert(virt_text, { "Sort: ", "@field" })
+  table.insert(virt_text, { "󰒺 : ", "@field" })
 
   if vim.g.simplyfile_explorer.reverse_sort then
     table.insert(virt_text, { "reversed ", "@keyword" })
   end
 
-  local sort_name = vim.g.simplyfile_explorer.sort
-  table.insert(virt_text, { sort_name, "@string" })
+  if type(vim.g.simplyfile_explorer.sort) == "string" then
+    local sort_name = vim.g.simplyfile_explorer.sort
+    table.insert(virt_text, { sort_name, "@string" })
+  end
 
   vim.api.nvim_buf_set_extmark(up, ns, 0, 0, {
     id = 3,
@@ -336,7 +343,7 @@ function M.search()
   local buf = vim.api.nvim_create_buf(true, true)
   local win = vim.api.nvim_open_win(buf, true, config)
   local ns = vim.api.nvim_create_namespace("SimplyFileSearchStatus")
-  local text = "Search For: "
+  local text = " : "
 
   vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
     id = 1,
