@@ -9,9 +9,17 @@ local po = util.percent_of
 ---@alias border_style "double" | "single" | "none" | "solid" | "rounded" | "shadow" | string[] | string[][]
 ---@alias SimplyFile.Show boolean | fun(dir: SimplyFile.Directory): boolean
 
+---@alias SimplyFile.ClipboardOpts { notify?: boolean }
 ---@alias SimplyFile.PreviewOpts { show?: SimplyFile.Show, max_lines?: wrapped<integer> }
+---@alias SimplyFile.Filter table<string, fun(dir: SimplyFile.Directory): boolean>
+---@alias SimplyFile.DefaultFilter string | fun(dir: SimplyFile.Directory): boolean
+---@alias SimplyFile.Sort table<string, fun(a: SimplyFile.Directory, b: SimplyFile.Directory): boolean>
+---@alias SimplyFile.DefaultSort string | fun(a: SimplyFile.Directory, b: SimplyFile.Directory): boolean
+---@alias SimplyFile.Opts { keymaps?: table<string, fun(dir: SimplyFile.Directory)>, border?: { main?: border_style, left?: border_style, right?: border_style, up?: border_style }, default_keymaps?: boolean, open_on_enter?: boolean, preview?: SimplyFile.PreviewOpts, clipboard?: SimplyFile.ClipboardOpts, filters?: SimplyFile.Filter, default_filter?: SimplyFile.DefaultFilter, sorts?: SimplyFile.Sort, default_sort?: SimplyFile.DefaultSort }
 
----@alias SimplyFile.Opts { keymaps?: table<string, fun(dir: SimplyFile.Directory)>, border?: { main?: border_style, left?: border_style, right?: border_style, up?: border_style }, default_keymaps?: boolean, open_on_enter?: boolean, preview?: SimplyFile.PreviewOpts }
+---@alias WinBuf { win: integer, buf: integer }
+---@alias SimplyFile.ExplState { left: WinBuf, main: WinBuf, right: WinBuf, up: WinBuf, dirs: SimplyFile.Directory[], path: string, group_id: integer, search: string, filter: SimplyFile.DefaultFilter, reverse_filter: boolean, sort: SimplyFile.DefaultSort, reverse_sort: boolean }
+
 ---setup the simplyfile plugin
 ---@param opts SimplyFile.Opts?
 function M.setup(opts)
@@ -31,7 +39,35 @@ function M.setup(opts)
         return vim.o.lines
       end
     },
+    clipboard = {
+      notify = false,
+    },
+    filters = {
+      start_with_dot = function(dir)
+        return vim.startswith(dir.name, ".")
+      end,
+      file = function(dir)
+        return not dir.is_folder
+      end,
+    },
+    default_filter = function() return true end,
+    sorts = {
+      by_size = function(dirA, dirB)
+        return vim.fn.getfsize(dirA.absolute) < vim.fn.getfsize(dirB.absolute)
+      end
+    },
+    default_sort = function(dirA, dirB)
+      if dirA.is_folder then
+        if dirA.is_folder and not dirB.is_folder then
+          return 1 < 0
+        elseif not dirA.is_folder and dirB.is_folder then
+          return 0 < 1
+        end
+      end
+      return dirA.name < dirB.name
+    end,
   } --[[@as SimplyFile.Opts]])
+
   vim.g.simplyfile_explorer = nil
   vim.api.nvim_create_user_command("SimplyFileOpen", M.open, {})
   vim.api.nvim_create_user_command("SimplyFileClose", M.close, {})
@@ -70,7 +106,6 @@ function M.open(path)
     path = vim.fn.getcwd(0) .. "/" .. path
   end
   path = util.trim_dot(vim.fs.normalize(path))
-  local dirs = util.dirs(path)
   local height = po(80, vim.o.lines) - 3
   local row = po(5, vim.o.lines) + 3
   local half = po(30, vim.o.columns)
@@ -109,17 +144,23 @@ function M.open(path)
     false)
   util.win_edit_config(right.win, { border = vim.g.simplyfile_config.border.right })
 
+  ---@type SimplyFile.ExplState
   vim.g.simplyfile_explorer = {
     left = left,
     main = main,
     right = right,
     up = up,
-    dirs = dirs,
+    dirs = {},
     path = path,
     group_id = vim.api.nvim_create_augroup("SimplyFile", {}),
     search = "",
-    mode = nil,
+    filter = vim.g.simplyfile_config.default_filter,
+    reverse_filter = false,
+    sort = vim.g.simplyfile_config.default_sort,
+    reverse_sort = false,
   }
+  mapping.reload_dirs()
+  local dirs = vim.g.simplyfile_explorer.dirs
 
   for c, dir in ipairs(dirs) do
     vim.api.nvim_buf_set_lines(main.buf, c - 1, c, false, { "  " .. dir.icon .. " " .. dir.name })

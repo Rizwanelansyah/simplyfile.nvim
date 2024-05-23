@@ -32,6 +32,9 @@ function M.copy(dir)
   if not dir then return end
   if M.contain(dir) then return end
   table.insert(M.registers, { method = 'copy', dir = dir, id = M.create_id() } --[[@as SimplyFile.ClipboardRegister]])
+  if vim.g.simplyfile_config.clipboard.notify then
+    vim.notify("copy " .. dir.name .. " added to clipboard")
+  end
 end
 
 ---cut file/folder to clipboard entry
@@ -40,6 +43,9 @@ function M.cut(dir)
   if not dir then return end
   if M.contain(dir) then return end
   table.insert(M.registers, { method = 'cut', dir = dir, id = M.create_id() } --[[@as SimplyFile.ClipboardRegister]])
+  if vim.g.simplyfile_config.clipboard.notify then
+    vim.notify("cut " .. dir.name .. " added to clipboard")
+  end
 end
 
 ---paste {entry} to {dest}
