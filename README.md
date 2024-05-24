@@ -47,5 +47,5 @@ require("simplyfile").setup {
 ## TODO:
 - ✅ clipboard
 - ✅ search bar
-- ❌ filter
-- ❌ sort
+- ✅ filter
+- ✅ sort
