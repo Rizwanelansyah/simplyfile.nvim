@@ -98,7 +98,7 @@ end
 ---@param dest string destination path
 ---@param after fun()? callback if the file is pasted
 function M.paste_select(dest, after)
-  local buf = vim.api.nvim_create_buf(true, true)
+  local buf = vim.api.nvim_create_buf(false, true)
   local win = util.open_win(vim.o.columns - 2, math.floor(vim.o.lines / 2) - 2, math.floor(vim.o.lines / 2) - 1, 1, buf,
     true)
   local ns = vim.api.nvim_create_namespace("SimplyFile")

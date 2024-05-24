@@ -115,7 +115,7 @@ function M.open(path)
   local col_offset = math.floor(half / 6) - 2
 
   local up = {
-    buf = vim.api.nvim_create_buf(true, true),
+    buf = vim.api.nvim_create_buf(false, true),
   }
   up.win = util.open_win((half * 3) + 4, 1, row - 3, col_offset, up.buf, false)
   util.win_edit_config(up.win, {
@@ -123,7 +123,7 @@ function M.open(path)
   })
 
   local left = {
-    buf = vim.api.nvim_create_buf(true, true),
+    buf = vim.api.nvim_create_buf(false, true),
   }
   left.win = util.open_win(half, height, row, col_offset, left.buf, false)
   util.win_edit_config(left.win, {
@@ -131,7 +131,7 @@ function M.open(path)
   })
 
   local main = {
-    buf = vim.api.nvim_create_buf(true, true),
+    buf = vim.api.nvim_create_buf(false, true),
   }
   main.win = util.open_win(half, height, row, half + 2 + col_offset,
     main.buf, true)
@@ -140,7 +140,7 @@ function M.open(path)
   vim.api.nvim_set_option_value("cursorline", true, { win = main.win })
 
   local right = {
-    buf = vim.api.nvim_create_buf(true, true),
+    buf = vim.api.nvim_create_buf(false, true),
   }
   right.win = util.open_win(half, height, row, (half * 2) + 4 + col_offset,
     right.buf,

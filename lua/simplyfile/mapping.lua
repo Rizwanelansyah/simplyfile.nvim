@@ -340,7 +340,7 @@ end
 
 function M.search()
   local config = vim.api.nvim_win_get_config(vim.g.simplyfile_explorer.up.win)
-  local buf = vim.api.nvim_create_buf(true, true)
+  local buf = vim.api.nvim_create_buf(false, true)
   local win = vim.api.nvim_open_win(buf, true, config)
   local ns = vim.api.nvim_create_namespace("SimplyFileSearchStatus")
   local text = " : "
