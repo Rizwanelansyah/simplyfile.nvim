@@ -52,10 +52,8 @@ function M.setup(opts)
     },
     default_filter = function() return true end,
     sorts = {
-      filesize = function(dirA, dirB)
-        local a = dirA.is_folder and -5 or vim.fn.getfsize(dirA.absolute)
-        local b = dirB.is_folder and -5 or vim.fn.getfsize(dirB.absolute)
-        return a < b
+      by_size = function(dirA, dirB)
+        return vim.fn.getfsize(dirA.absolute) < vim.fn.getfsize(dirB.absolute)
       end
     },
     default_sort = function(dirA, dirB)
