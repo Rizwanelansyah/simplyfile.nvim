@@ -59,6 +59,7 @@ function M.filter_dirs()
 
     util.buf_unlocks(up)
     local virt_text = {}
+    table.insert(virt_text, { " | ", "FloatBorder" })
     table.insert(virt_text, { " : ", "@field" })
 
     if vim.g.simplyfile_explorer.reverse_filter then
@@ -69,6 +70,7 @@ function M.filter_dirs()
       local filter_name = vim.g.simplyfile_explorer.filter
       table.insert(virt_text, { filter_name, "@string" })
     end
+    table.insert(virt_text, { " | ", "FloatBorder" })
 
     vim.api.nvim_buf_set_extmark(up, ns, 0, 0, {
       id = 1,
@@ -92,11 +94,10 @@ function M.search_dirs()
     vim.api.nvim_buf_del_extmark(up, ns, 2)
   else
     local virt_text = {}
-    if type(vim.g.simplyfile_explorer.filter) == "string" then
-      table.insert(virt_text, { " | ", "FloatBorder" })
-    end
+    table.insert(virt_text, { " | ", "FloatBorder" })
     table.insert(virt_text, { " : ", "@field" })
     table.insert(virt_text, { search, "@string" })
+    table.insert(virt_text, { " | ", "FloatBorder" })
     vim.api.nvim_buf_set_extmark(up, ns, 0, 0, {
       id = 2,
       end_row = 0,
@@ -145,9 +146,7 @@ function M.sort_dirs()
 
   util.buf_unlocks(up)
   local virt_text = {}
-  if vim.g.simplyfile_explorer.search ~= "" or (type(vim.g.simplyfile_explorer.filter) == "string" or vim.g.simplyfile_explorer.reverse_filter) then
-    table.insert(virt_text, { " | ", "FloatBorder" })
-  end
+  table.insert(virt_text, { " | ", "FloatBorder" })
   table.insert(virt_text, { "󰒺 : ", "@field" })
 
   if vim.g.simplyfile_explorer.reverse_sort then
@@ -159,6 +158,7 @@ function M.sort_dirs()
     table.insert(virt_text, { sort_name, "@string" })
   end
 
+  table.insert(virt_text, { " | ", "FloatBorder" })
   vim.api.nvim_buf_set_extmark(up, ns, 0, 0, {
     id = 3,
     end_row = 0,
