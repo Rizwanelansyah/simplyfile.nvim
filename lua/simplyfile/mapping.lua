@@ -6,6 +6,7 @@ local clipboard = require("simplyfile.clipboard")
 ---@param value SimplyFile.ExplState
 function M.override_state(value)
   vim.g.simplyfile_explorer = vim.tbl_extend("force", vim.g.simplyfile_explorer, value)
+  vim.cmd("doautocmd User SimplyFileStateChange")
 end
 
 ---get current filter state
@@ -49,38 +50,6 @@ function M.filter_dirs()
       end
     end
     M.override_state { dirs = filtered_dirs }
-
-    local ns = vim.api.nvim_create_namespace("SimplyFile")
-    local up = vim.g.simplyfile_explorer.up.buf
-    if type(vim.g.simplyfile_explorer.filter) ~= "string" and not vim.g.simplyfile_explorer.reverse_filter then
-      vim.api.nvim_buf_del_extmark(up, ns, 1)
-      return
-    end
-
-    util.buf_unlocks(up)
-    local virt_text = {}
-    table.insert(virt_text, { " | ", "FloatBorder" })
-    table.insert(virt_text, { " : ", "@field" })
-
-    if vim.g.simplyfile_explorer.reverse_filter then
-      table.insert(virt_text, { "reversed ", "@keyword" })
-    end
-
-    if type(vim.g.simplyfile_explorer.filter) == "string" then
-      local filter_name = vim.g.simplyfile_explorer.filter
-      table.insert(virt_text, { filter_name, "@string" })
-    end
-    table.insert(virt_text, { " | ", "FloatBorder" })
-
-    vim.api.nvim_buf_set_extmark(up, ns, 0, 0, {
-      id = 1,
-      end_row = 0,
-      end_col = 0,
-      virt_text = virt_text,
-      virt_text_pos = "inline",
-      right_gravity = false,
-    })
-    util.buf_locks(up)
   end
 end
 
@@ -88,26 +57,6 @@ function M.search_dirs()
   local ns = vim.api.nvim_create_namespace("SimplyFile")
   local search = vim.g.simplyfile_explorer.search
   local up = vim.g.simplyfile_explorer.up.buf
-
-  util.buf_unlocks(up)
-  if search == "" then
-    vim.api.nvim_buf_del_extmark(up, ns, 2)
-  else
-    local virt_text = {}
-    table.insert(virt_text, { " | ", "FloatBorder" })
-    table.insert(virt_text, { " : ", "@field" })
-    table.insert(virt_text, { search, "@string" })
-    table.insert(virt_text, { " | ", "FloatBorder" })
-    vim.api.nvim_buf_set_extmark(up, ns, 0, 0, {
-      id = 2,
-      end_row = 0,
-      end_col = 0,
-      virt_text = virt_text,
-      virt_text_pos = "inline",
-      right_gravity = false,
-    })
-  end
-  util.buf_locks(up)
 
   local dirs = vim.g.simplyfile_explorer.dirs
   local new_dirs = {}
@@ -117,9 +66,9 @@ function M.search_dirs()
     end
   end
 
-  vim.g.simplyfile_explorer = vim.tbl_extend('force', vim.g.simplyfile_explorer, {
+  M.override_state {
     dirs = new_dirs,
-  })
+  }
 end
 
 function M.sort_dirs()
@@ -136,38 +85,6 @@ function M.sort_dirs()
     table.sort(dirs, sort)
   end
   M.override_state { dirs = dirs }
-
-  local ns = vim.api.nvim_create_namespace("SimplyFile")
-  local up = vim.g.simplyfile_explorer.up.buf
-  if type(vim.g.simplyfile_explorer.sort) ~= "string" and not vim.g.simplyfile_explorer.reverse_sort then
-    vim.api.nvim_buf_del_extmark(up, ns, 3)
-    return
-  end
-
-  util.buf_unlocks(up)
-  local virt_text = {}
-  table.insert(virt_text, { " | ", "FloatBorder" })
-  table.insert(virt_text, { "󰒺 : ", "@field" })
-
-  if vim.g.simplyfile_explorer.reverse_sort then
-    table.insert(virt_text, { "reversed ", "@keyword" })
-  end
-
-  if type(vim.g.simplyfile_explorer.sort) == "string" then
-    local sort_name = vim.g.simplyfile_explorer.sort
-    table.insert(virt_text, { sort_name, "@string" })
-  end
-
-  table.insert(virt_text, { " | ", "FloatBorder" })
-  vim.api.nvim_buf_set_extmark(up, ns, 0, 0, {
-    id = 3,
-    end_row = 0,
-    end_col = 0,
-    virt_text = virt_text,
-    virt_text_pos = "inline",
-    right_gravity = false,
-  })
-  util.buf_locks(up)
 end
 
 function M.reload_dirs()
@@ -201,6 +118,31 @@ function M.go_to_parent()
   }
   ---@diagnostic disable-next-line: missing-fields
   M.refresh { absolute = path }
+end
+
+---Go to Current Working Directory
+function M.go_to_cwd()
+  local path = vim.fn.getcwd(0)
+  M.override_state { path = path }
+  ---@diagnostic disable-next-line: missing-fields
+  M.refresh { absolute = "" }
+end
+
+---Set currrent explorer path as Current Working Directory
+function M.current_path_as_cwd()
+  local path = vim.g.simplyfile_explorer.path
+  vim.cmd("cd " .. path)
+  M.go_to_cwd()
+end
+
+---Set dir under cursor as Current Working Directory if
+---{dir} is a folder and go to {dir}
+---@param dir SimplyFile.Directory
+function M.under_cursor_as_cwd(dir)
+  if not dir then return end
+  if not dir.is_folder then return end
+  vim.cmd("cd " .. dir.absolute)
+  M.go_to_cwd()
 end
 
 ---add new file/folder to current directory
@@ -364,6 +306,20 @@ function M.search()
   vim.api.nvim_buf_set_keymap(buf, "i", "<ESC>", "", {
     callback = close
   })
+
+  vim.api.nvim_create_autocmd("BufModifiedSet", {
+    buffer = buf,
+    callback = function()
+      local input = vim.api.nvim_get_current_line()
+      M.override_state {
+        search = input,
+      }
+      M.reload_dirs()
+      M.reload_main()
+      vim.bo.modified = false
+    end,
+  })
+
   vim.api.nvim_buf_set_keymap(buf, "i", "<CR>", "", {
     callback = function()
       local input = vim.api.nvim_get_current_line()
@@ -380,6 +336,16 @@ function M.search()
 
   vim.cmd("setlocal nocursorline nonumber")
   vim.cmd("startinsert!")
+end
+
+function M.clear_search(dir)
+  M.override_state { search = "" }
+  if dir then
+    M.refresh(dir)
+  else
+    ---@diagnostic disable-next-line: missing-fields
+    M.refresh { absolute = "" }
+  end
 end
 
 function M.paste(dir)
@@ -414,6 +380,22 @@ function M.refresh(dir)
   M.redraw(dir)
 end
 
+function M.reload_main(dir)
+  local main = vim.g.simplyfile_explorer.main
+  local dirs = vim.g.simplyfile_explorer.dirs
+  util.buf_unlocks(main.buf)
+  vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
+  vim.api.nvim_buf_set_lines(main.buf, 0, -1, false, { "" })
+  for c, d in ipairs(dirs) do
+    vim.api.nvim_buf_set_lines(main.buf, c - 1, c, false, { "  " .. d.icon .. " " .. d.name })
+    vim.api.nvim_buf_add_highlight(main.buf, 0, d.hl, c - 1, 0, 5)
+    if dir and d.absolute == dir.absolute then
+      vim.api.nvim_win_set_cursor(main.win, { c, 0 })
+    end
+  end
+  util.buf_locks(main.buf)
+end
+
 ---Redraw the ui
 ---@param dir SimplyFile.Directory start cursor on this directory
 function M.redraw(dir)
@@ -423,19 +405,12 @@ function M.redraw(dir)
   local path = vim.g.simplyfile_explorer.path
   local dirs = vim.g.simplyfile_explorer.dirs
 
+  M.reload_main(dir)
   util.buf_unlocks(main.buf, left.buf)
-  vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
-  vim.api.nvim_buf_set_lines(main.buf, 0, -1, false, { "" })
-  for c, d in ipairs(dirs) do
-    vim.api.nvim_buf_set_lines(main.buf, c - 1, c, false, { "  " .. d.icon .. " " .. d.name })
-    vim.api.nvim_buf_add_highlight(main.buf, 0, d.hl, c - 1, 0, 5)
-    if d.absolute == dir.absolute then
-      vim.api.nvim_win_set_cursor(main.win, { c, 0 })
-    end
-  end
 
   vim.api.nvim_buf_set_lines(left.buf, 0, -1, false, { "" })
-  local parent_dirs = util.dirs(vim.fs.dirname(path))
+  local parent_path = vim.fs.dirname(path)
+  local parent_dirs = util.dirs(parent_path)
   for i, d in ipairs(parent_dirs) do
     vim.api.nvim_buf_set_lines(left.buf, i - 1, i, false, { "  " .. d.icon .. " " .. d.name })
     vim.api.nvim_buf_add_highlight(left.buf, 0, d.hl, i - 1, 0, 5)
@@ -445,7 +420,8 @@ function M.redraw(dir)
     end
   end
 
-  util.win_edit_config(main.win, { title = " " .. vim.fs.basename(path) })
+  util.win_edit_config(main.win, { title = " " .. vim.fs.basename(path), title_pos = "center" })
+  util.win_edit_config(left.win, { title = " " .. vim.fs.basename(parent_path), title_pos = "right" })
   util.buf_locks(main.buf, left.buf)
 end
 
@@ -459,6 +435,7 @@ M.default = {
   r = M.rename,
   d = M.delete,
   s = M.search,
+  S = M.clear_search,
   f = M.filter,
   F = M.set_filter_to_default,
   ["<C-f>"] = M.toggle_reverse_filter,
@@ -469,6 +446,9 @@ M.default = {
   x = clipboard.cut,
   v = M.paste,
   V = M.paste_select,
+  gc = M.go_to_cwd,
+  ["<C-]>"] = M.under_cursor_as_cwd,
+  ["<C-[>"] = M.current_path_as_cwd,
 }
 
 return M

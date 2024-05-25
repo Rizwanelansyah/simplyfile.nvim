@@ -1,6 +1,7 @@
 local M = {}
 local util = require("simplyfile.util")
 local mapping = require("simplyfile.mapping")
+local comp = require("simplyfile.components")
 local po = util.percent_of
 
 ---@generic T
@@ -18,7 +19,8 @@ local po = util.percent_of
 ---@alias SimplyFile.Opts { keymaps?: table<string, fun(dir: SimplyFile.Directory)>, border?: { main?: border_style, left?: border_style, right?: border_style, up?: border_style }, default_keymaps?: boolean, open_on_enter?: boolean, preview?: SimplyFile.PreviewOpts, clipboard?: SimplyFile.ClipboardOpts, filters?: SimplyFile.Filter, default_filter?: SimplyFile.DefaultFilter, sorts?: SimplyFile.Sort, default_sort?: SimplyFile.DefaultSort }
 
 ---@alias WinBuf { win: integer, buf: integer }
----@alias SimplyFile.ExplState { left: WinBuf, main: WinBuf, right: WinBuf, up: WinBuf, dirs: SimplyFile.Directory[], path: string, group_id: integer, search: string, filter: SimplyFile.DefaultFilter, reverse_filter: boolean, sort: SimplyFile.DefaultSort, reverse_sort: boolean }
+---@alias SimplyFile.UpBarOpts { events?: table<string, vim.api.keyset.create_autocmd>, callback?: fun(expl: SimplyFile.ExplState): table, table }
+---@alias SimplyFile.ExplState { left: WinBuf, main: WinBuf, right: WinBuf, up: WinBuf, dirs: SimplyFile.Directory[], path: string, group_id: integer, search: string, filter: SimplyFile.DefaultFilter, reverse_filter: boolean, sort: SimplyFile.DefaultSort, reverse_sort: boolean, up_bar?: SimplyFile.UpBarOpts }
 
 ---setup the simplyfile plugin
 ---@param opts SimplyFile.Opts?
@@ -31,6 +33,49 @@ function M.setup(opts)
       left = "rounded",
       right = "rounded",
       up = { "╭", "─", "╮", ":", "╯", "─", "╰", ":" },
+    },
+    up_bar = {
+      events = {
+        User = {
+          pattern = "SimplyFileStateChange"
+        },
+        DirChanged = {
+          pattern = "global"
+        },
+      },
+      -- event = "CursorMoved",
+      ---@param expl SimplyFile.ExplState
+      ---@return table, table
+      callback = function(expl)
+        local left = { { " ", "Normal" } }
+        local del = { " | ", "FloatBorder" }
+        local function insert(text, comps)
+          if not comps then return end
+          for _, c in ipairs(comps) do
+            table.insert(text, c)
+          end
+        end
+        local filter = comp.filter(expl)
+        insert(left, filter)
+
+        local sort = comp.sort(expl)
+        if filter and sort then
+          insert(left, { del })
+        end
+        insert(left, sort)
+
+        local search = comp.search(expl)
+        if (filter and search) or (sort and search) then
+          insert(left, { del })
+        end
+        insert(left, search)
+
+        local right = {}
+        insert(right, comp.cwd())
+        table.insert(right, { " ", "Normal" })
+
+        return left, right
+      end
     },
     open_on_enter = true,
     preview = {
@@ -74,6 +119,40 @@ function M.setup(opts)
   vim.g.simplyfile_explorer = nil
   vim.api.nvim_create_user_command("SimplyFileOpen", M.open, {})
   vim.api.nvim_create_user_command("SimplyFileClose", M.close, {})
+
+  local up_bar = vim.g.simplyfile_config.up_bar
+  local opts = {
+    callback = function()
+      ---@type SimplyFile.ExplState
+      local expl = vim.g.simplyfile_explorer
+      if expl then
+        local ns = vim.api.nvim_create_namespace("SimplyFile")
+        vim.api.nvim_buf_del_extmark(expl.up.buf, ns, 1)
+        vim.api.nvim_buf_del_extmark(expl.up.buf, ns, 2)
+        local text_left, text_right = up_bar.callback(expl)
+        vim.api.nvim_buf_set_extmark(expl.up.buf, ns, 0, 0, {
+          id = 1,
+          end_row = 0,
+          end_col = 0,
+          virt_text = text_left or {},
+          virt_text_pos = "inline",
+          right_gravity = false,
+        })
+        vim.api.nvim_buf_set_extmark(expl.up.buf, ns, 0, 0, {
+          id = 2,
+          end_row = 0,
+          end_col = 0,
+          virt_text = text_right or {},
+          virt_text_pos = "right_align",
+          right_gravity = false,
+        })
+      end
+    end,
+  }
+  for event, o in pairs(up_bar.events) do
+    vim.api.nvim_create_autocmd(event, vim.tbl_extend("force", o, opts))
+  end
+
   if vim.g.simplyfile_config.open_on_enter then
     vim.api.nvim_create_autocmd("VimEnter", {
       callback = function()
@@ -127,7 +206,9 @@ function M.open(path)
   }
   left.win = util.open_win(half, height, row, col_offset, left.buf, false)
   util.win_edit_config(left.win, {
-    border = vim.g.simplyfile_config.border.left
+    border = vim.g.simplyfile_config.border.left,
+    title = " " .. vim.fs.basename(vim.fs.dirname(path)),
+    title_pos = "right",
   })
 
   local main = {
@@ -222,11 +303,13 @@ function M.open(path)
           end
           ::the_end::
         end
+        util.win_edit_config(right.win, { title = dir.icon .. " " .. dir.name, title_pos = "left" })
         util.buf_unlocks(right.buf)
       else
         util.buf_unlocks(right.buf)
         vim.api.nvim_set_option_value("filetype", "empty", { buf = right.buf })
         vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "" })
+        util.win_edit_config(right.win, { title = "", title_pos = "left" })
         util.buf_locks(right.buf)
       end
     end

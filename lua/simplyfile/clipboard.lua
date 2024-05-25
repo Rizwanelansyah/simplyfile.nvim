@@ -110,7 +110,7 @@ function M.paste_select(dest, after)
       title = "[ Clipboard ]",
       title_pos = "center",
       footer =
-      "[ KeyMaps: d -> Delete Register, <CR> -> Select Register, <ESC> -> Exit ]",
+      "[ KeyMaps: d -> Delete, <CR> -> Select, <ESC> -> Exit, 1-9 -> Quick Select ]",
       footer_pos = "center"
     })
   for i, reg in ipairs(M.registers) do
@@ -123,6 +123,7 @@ function M.paste_select(dest, after)
       virt_text_pos = "inline",
     })
   end
+  vim.api.nvim_set_option_value("number", true, { win = win })
   local close = function()
     vim.api.nvim_win_close(win, true)
     vim.api.nvim_buf_delete(buf, { force = true })
@@ -148,6 +149,17 @@ function M.paste_select(dest, after)
       end
     end
   })
+  for i = 1, 9 do
+    vim.api.nvim_buf_set_keymap(buf, 'n', tostring(i), "", {
+      callback = function()
+        local reg = table.remove(M.registers, i)
+        close()
+        if reg then
+          M.paste(reg, dest, after)
+        end
+      end
+    })
+  end
 end
 
 return M
