@@ -12,7 +12,7 @@ simple file explorer plugin for neovim
 ## installation
 With [lazy.nvim](https://github.com/folke/lazy.nvim)
 ```lua
-{ 'Rizwanelansyah/simplyfile.nvim', tag = 'v0.3' }
+{ 'Rizwanelansyah/simplyfile.nvim', tag = '<tag>' }
 ```
 
 ## config
