@@ -16,7 +16,8 @@ local po = util.percent_of
 ---@alias SimplyFile.DefaultFilter string | fun(dir: SimplyFile.Directory): boolean
 ---@alias SimplyFile.Sort table<string, fun(a: SimplyFile.Directory, b: SimplyFile.Directory): boolean>
 ---@alias SimplyFile.DefaultSort string | fun(a: SimplyFile.Directory, b: SimplyFile.Directory): boolean
----@alias SimplyFile.Opts { keymaps?: table<string, fun(dir: SimplyFile.Directory)>, border?: { main?: border_style, left?: border_style, right?: border_style, up?: border_style }, default_keymaps?: boolean, open_on_enter?: boolean, preview?: SimplyFile.PreviewOpts, clipboard?: SimplyFile.ClipboardOpts, filters?: SimplyFile.Filter, default_filter?: SimplyFile.DefaultFilter, sorts?: SimplyFile.Sort, default_sort?: SimplyFile.DefaultSort }
+---@alias SimplyFile.IconsOverride { filetype?: table, filename?: table }
+---@alias SimplyFile.Opts { keymaps?: table<string, fun(dir: SimplyFile.Directory)>, border?: { main?: border_style, left?: border_style, right?: border_style, up?: border_style }, win_opt?: { main?: table, left?: table, right?: table, up?: table }, default_keymaps?: boolean, open_on_enter?: boolean, preview?: SimplyFile.PreviewOpts, clipboard?: SimplyFile.ClipboardOpts, filters?: SimplyFile.Filter, default_filter?: SimplyFile.DefaultFilter, sorts?: SimplyFile.Sort, default_sort?: SimplyFile.DefaultSort, icons?: SimplyFile.IconsOverride }
 
 ---@alias WinBuf { win: integer, buf: integer }
 ---@alias SimplyFile.UpBarOpts { events?: table<string, vim.api.keyset.create_autocmd>, callback?: fun(expl: SimplyFile.ExplState): table, table }
@@ -27,12 +28,22 @@ local po = util.percent_of
 function M.setup(opts)
   vim.g.simplyfile_config = vim.tbl_deep_extend("keep", opts or {}, {
     default_keymaps = true,
+    icons = {
+      filetype = {},
+      filename = {},
+    },
     keymaps = {},
     border = {
       main = "double",
       left = "rounded",
       right = "rounded",
       up = { "╭", "─", "╮", ":", "╯", "─", "╰", ":" },
+    },
+    win_opt = {
+      up = {},
+      left = {},
+      main = {},
+      right = {},
     },
     up_bar = {
       events = {
@@ -47,7 +58,7 @@ function M.setup(opts)
       ---@param expl SimplyFile.ExplState
       ---@return table, table
       callback = function(expl)
-        local left = { { " ", "Normal" } }
+        local left = { { " ", "NormalFloat" } }
         local del = { " | ", "FloatBorder" }
         local function insert(text, comps)
           if not comps then return end
@@ -72,7 +83,7 @@ function M.setup(opts)
 
         local right = {}
         insert(right, comp.cwd())
-        table.insert(right, { " ", "Normal" })
+        table.insert(right, { " ", "NormalFloat" })
 
         return left, right
       end
@@ -189,44 +200,70 @@ function M.open(path)
   end
   path = util.trim_dot(vim.fs.normalize(path))
   local height = po(80, vim.o.lines) - 3
-  local row = po(5, vim.o.lines) + 3
+  local row = po(5, vim.o.lines) + 4
   local half = po(30, vim.o.columns)
   local col_offset = math.floor(half / 6) - 2
 
   local up = {
     buf = vim.api.nvim_create_buf(false, true),
   }
-  up.win = util.open_win((half * 3) + 4, 1, row - 3, col_offset, up.buf, false)
+  local up_none_border = vim.g.simplyfile_config.border.up == "none"
+  up.win = util.open_win((half * 3) + 4 + (up_none_border and 2 or 0), 1, row - 3 + (up_none_border and 2 or 0),
+    col_offset, up.buf, false)
   util.win_edit_config(up.win, {
     border = vim.g.simplyfile_config.border.up
   })
+  for option, value in pairs(vim.g.simplyfile_config.win_opt.up) do
+    vim.api.nvim_set_option_value(option, value, { win = up.win })
+  end
 
   local left = {
     buf = vim.api.nvim_create_buf(false, true),
   }
-  left.win = util.open_win(half, height, row, col_offset, left.buf, false)
+  local left_none_border = vim.g.simplyfile_config.border.left == "none"
+  left.win = util.open_win(half + (left_none_border and 2 or 0), height + (left_none_border and 2 or 0), row, col_offset,
+    left.buf,
+    false)
   util.win_edit_config(left.win, {
     border = vim.g.simplyfile_config.border.left,
-    title = " " .. vim.fs.basename(vim.fs.dirname(path)),
-    title_pos = "right",
   })
+  if not left_none_border then
+    util.win_edit_config(left.win, {
+      title = " " .. vim.fs.basename(vim.fs.dirname(path)),
+      title_pos = "right",
+    })
+  end
+  for option, value in pairs(vim.g.simplyfile_config.win_opt.left) do
+    vim.api.nvim_set_option_value(option, value, { win = left.win })
+  end
 
+  local main_none_border = vim.g.simplyfile_config.border.main == "none"
   local main = {
     buf = vim.api.nvim_create_buf(false, true),
   }
-  main.win = util.open_win(half, height, row, half + 2 + col_offset,
+  main.win = util.open_win(half + (main_none_border and 2 or 0), height + (main_none_border and 2 or 0), row,
+    half + 2 + col_offset,
     main.buf, true)
   util.win_edit_config(main.win,
     { title = " " .. vim.fs.basename(path), title_pos = "center", border = vim.g.simplyfile_config.border.main })
   vim.api.nvim_set_option_value("cursorline", true, { win = main.win })
+  for option, value in pairs(vim.g.simplyfile_config.win_opt.main) do
+    vim.api.nvim_set_option_value(option, value, { win = main.win })
+  end
 
   local right = {
     buf = vim.api.nvim_create_buf(false, true),
   }
-  right.win = util.open_win(half, height, row, (half * 2) + 4 + col_offset,
+  local right_none_border = vim.g.simplyfile_config.border.right == "none"
+
+  right.win = util.open_win(half + (right_none_border and 2 or 0), height + (right_none_border and 2 or 0), row,
+    (half * 2) + 4 + col_offset,
     right.buf,
     false)
   util.win_edit_config(right.win, { border = vim.g.simplyfile_config.border.right })
+  for option, value in pairs(vim.g.simplyfile_config.win_opt.right) do
+    vim.api.nvim_set_option_value(option, value, { win = right.win })
+  end
 
   ---@type SimplyFile.ExplState
   vim.g.simplyfile_explorer = {
@@ -303,15 +340,26 @@ function M.open(path)
           end
           ::the_end::
         end
-        util.win_edit_config(right.win, { title = dir.icon .. " " .. dir.name, title_pos = "left" })
+        if vim.g.simplyfile_config.border.right ~= "none" then
+          util.win_edit_config(right.win, { title = dir.icon .. " " .. dir.name, title_pos = "left" })
+        end
         util.buf_unlocks(right.buf)
       else
         util.buf_unlocks(right.buf)
         vim.api.nvim_set_option_value("filetype", "empty", { buf = right.buf })
         vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "" })
-        util.win_edit_config(right.win, { title = "", title_pos = "left" })
+        if vim.g.simplyfile_config.border.right ~= "none" then
+          util.win_edit_config(right.win, { title = "", title_pos = "left" })
+        end
         util.buf_locks(right.buf)
       end
+    end
+  })
+
+  vim.api.nvim_create_autocmd("WinClosed", {
+    buffer = main.buf,
+    callback = function()
+      M.close()
     end
   })
 
@@ -320,34 +368,38 @@ function M.open(path)
     buffer = main.buf,
     callback = function()
       local height = po(80, vim.o.lines) - 3
-      local row = po(5, vim.o.lines) + 3
-      local col_offset = po(5, vim.o.columns)
+      local row = po(5, vim.o.lines) + 4
+      local col_offset = po(5, vim.o.columns) - 2
       local half = po(30, vim.o.columns)
 
+      local up_none_border = vim.g.simplyfile_config.border.up == "none"
       util.win_edit_config(up.win, {
-        width = (half * 3) + 4,
+        width = (half * 3) + 4 + (up_none_border and 2 or 0),
         height = 1,
-        row = row - 3,
+        row = row - 3 + (up_none_border and 2 or 0),
         col = col_offset,
       })
 
+      local left_none_border = vim.g.simplyfile_config.border.left == "none"
       util.win_edit_config(left.win, {
-        width = half,
-        height = height,
+        width = half + (left_none_border and 2 or 0),
+        height = height + (left_none_border and 2 or 0),
         row = row,
         col = col_offset,
       })
 
+      local main_none_border = vim.g.simplyfile_config.border.main == "none"
       util.win_edit_config(main.win, {
-        width = half,
-        height = height,
+        width = half + (main_none_border and 2 or 0),
+        height = height + (main_none_border and 2 or 0),
         row = row,
         col = half + 2 + col_offset,
       })
 
+      local right_none_border = vim.g.simplyfile_config.border.right == "none"
       util.win_edit_config(right.win, {
-        width = half,
-        height = height,
+        width = half + (right_none_border and 2 or 0),
+        height = height + (right_none_border and 2 or 0),
         row = row,
         col = (half * 2) + 4 + col_offset,
       })
@@ -381,14 +433,14 @@ end
 function M.close()
   if vim.g.simplyfile_explorer then
     vim.api.nvim_del_augroup_by_id(vim.g.simplyfile_explorer.group_id)
-    vim.api.nvim_win_close(vim.g.simplyfile_explorer.up.win, true)
-    vim.api.nvim_buf_delete(vim.g.simplyfile_explorer.up.buf, { force = true })
-    vim.api.nvim_win_close(vim.g.simplyfile_explorer.left.win, true)
-    vim.api.nvim_buf_delete(vim.g.simplyfile_explorer.left.buf, { force = true })
-    vim.api.nvim_win_close(vim.g.simplyfile_explorer.main.win, true)
-    vim.api.nvim_buf_delete(vim.g.simplyfile_explorer.main.buf, { force = true })
-    vim.api.nvim_win_close(vim.g.simplyfile_explorer.right.win, true)
-    vim.api.nvim_buf_delete(vim.g.simplyfile_explorer.right.buf, { force = true })
+    pcall(vim.api.nvim_win_close, vim.g.simplyfile_explorer.up.win, true)
+    pcall(vim.api.nvim_buf_delete, vim.g.simplyfile_explorer.up.buf, { force = true })
+    pcall(vim.api.nvim_win_close, vim.g.simplyfile_explorer.left.win, true)
+    pcall(vim.api.nvim_buf_delete, vim.g.simplyfile_explorer.left.buf, { force = true })
+    pcall(vim.api.nvim_win_close, vim.g.simplyfile_explorer.main.win, true)
+    pcall(vim.api.nvim_buf_delete, vim.g.simplyfile_explorer.main.buf, { force = true })
+    pcall(vim.api.nvim_win_close, vim.g.simplyfile_explorer.right.win, true)
+    pcall(vim.api.nvim_buf_delete, vim.g.simplyfile_explorer.right.buf, { force = true })
     vim.g.simplyfile_explorer = nil
   end
 end

@@ -1,5 +1,6 @@
 {
     "diagnostics.disable": [
         "redefined-local"
-    ]
+    ],
+    "workspace.checkThirdParty": "Disable"
 }

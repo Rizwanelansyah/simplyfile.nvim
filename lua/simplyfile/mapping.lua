@@ -54,9 +54,7 @@ function M.filter_dirs()
 end
 
 function M.search_dirs()
-  local ns = vim.api.nvim_create_namespace("SimplyFile")
   local search = vim.g.simplyfile_explorer.search
-  local up = vim.g.simplyfile_explorer.up.buf
 
   local dirs = vim.g.simplyfile_explorer.dirs
   local new_dirs = {}
@@ -284,8 +282,8 @@ function M.search()
   local config = vim.api.nvim_win_get_config(vim.g.simplyfile_explorer.up.win)
   local buf = vim.api.nvim_create_buf(false, true)
   local win = vim.api.nvim_open_win(buf, true, config)
-  local ns = vim.api.nvim_create_namespace("SimplyFileSearchStatus")
-  local text = " : "
+  local ns = vim.api.nvim_create_namespace("SimplyFile")
+  local text = "  : "
 
   vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
     id = 1,
@@ -307,7 +305,7 @@ function M.search()
     callback = close
   })
 
-  vim.api.nvim_create_autocmd("BufModifiedSet", {
+  vim.api.nvim_create_autocmd("TextChangedI", {
     buffer = buf,
     callback = function()
       local input = vim.api.nvim_get_current_line()
@@ -316,7 +314,6 @@ function M.search()
       }
       M.reload_dirs()
       M.reload_main()
-      vim.bo.modified = false
     end,
   })
 
@@ -393,6 +390,7 @@ function M.reload_main(dir)
       vim.api.nvim_win_set_cursor(main.win, { c, 0 })
     end
   end
+
   util.buf_locks(main.buf)
 end
 
@@ -403,7 +401,6 @@ function M.redraw(dir)
   local main = vim.g.simplyfile_explorer.main
   local left = vim.g.simplyfile_explorer.left
   local path = vim.g.simplyfile_explorer.path
-  local dirs = vim.g.simplyfile_explorer.dirs
 
   M.reload_main(dir)
   util.buf_unlocks(main.buf, left.buf)
@@ -420,8 +417,12 @@ function M.redraw(dir)
     end
   end
 
-  util.win_edit_config(main.win, { title = " " .. vim.fs.basename(path), title_pos = "center" })
-  util.win_edit_config(left.win, { title = " " .. vim.fs.basename(parent_path), title_pos = "right" })
+  if vim.g.simplyfile_config.border.main ~= "none" then
+    util.win_edit_config(main.win, { title = " " .. vim.fs.basename(path), title_pos = "center" })
+  end
+  if vim.g.simplyfile_config.border.left ~= "none" then
+    util.win_edit_config(left.win, { title = " " .. vim.fs.basename(parent_path), title_pos = "right" })
+  end
   util.buf_locks(main.buf, left.buf)
 end
 

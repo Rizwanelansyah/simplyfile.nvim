@@ -6,7 +6,7 @@ local M = {}
 function M.filter(expl)
   if type(expl.filter) == "string" or expl.reverse_filter then
     return {
-      { " ", "@field" },
+      { " : ", "@field" },
       { expl.reverse_filter and "rev " or "", "@keyword" },
       { type(expl.filter) == "string" and expl.filter or "", "@string" }
     }
@@ -19,7 +19,7 @@ end
 function M.sort(expl)
   if type(expl.sort) == "string" or expl.reverse_sort then
     return {
-      { "󰒺 ", "@field" },
+      { "󰒺 : ", "@field" },
       { expl.reverse_sort and "rev " or "", "@keyword" },
       { type(expl.sort) == "string" and expl.sort or "", "@string" }
     }
@@ -32,7 +32,7 @@ end
 function M.search(expl)
   if expl.search ~= "" then
     return {
-      { " ", "@field" },
+      { " : ", "@field" },
       { expl.search, "@string" }
     }
   end

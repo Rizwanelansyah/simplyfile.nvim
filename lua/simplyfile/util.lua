@@ -2,8 +2,10 @@ local M = {}
 
 ---get devicon highlight
 local function get_highlight_name(data)
+  if not data then return "NormalFloat" end
+
   if not data.name then
-    return "Normal"
+    return "NormalFloat"
   end
 
   return "DevIcon" .. data.name
@@ -25,19 +27,21 @@ function M.dirs(path)
   local files = {}
   local icons_by_filename = {}
   local icons_by_extension = {}
-  local devicon = require("nvim-web-devicons")
+  local ok, devicon = pcall(require, "nvim-web-devicons")
 
-  if devicon then
+  if ok then
     icons_by_filename = devicon.get_icons_by_filename()
     icons_by_extension = devicon.get_icons_by_extension()
   end
 
+  icons_by_filename = vim.tbl_extend("force", icons_by_filename, vim.g.simplyfile_config.icons.filename)
+
   if vim.fn.isdirectory(path) then
     for name, type in vim.fs.dir(path, { depth = 1 }) do
       local icon = icons_by_filename[name] or icons_by_extension[vim.filetype.match { filename = name }]
-      local hl = "Normal"
+      local hl = "NormalFloat"
       local filetype = vim.filetype.match { filename = name }
-      if devicon and icon then
+      if ok and icon then
         hl = get_highlight_name(icon)
       else
         icon = {
