@@ -2,7 +2,6 @@ local M = {}
 local util = require("simplyfile.util")
 local mapping = require("simplyfile.mapping")
 local comp = require("simplyfile.components")
-local po = util.percent_of
 
 ---@generic T
 ---@alias wrapped T | fun(): T
@@ -16,8 +15,8 @@ local po = util.percent_of
 ---@alias SimplyFile.DefaultFilter string | fun(dir: SimplyFile.Directory): boolean
 ---@alias SimplyFile.Sort table<string, fun(a: SimplyFile.Directory, b: SimplyFile.Directory): boolean>
 ---@alias SimplyFile.DefaultSort string | fun(a: SimplyFile.Directory, b: SimplyFile.Directory): boolean
----@alias SimplyFile.IconsOverride { filetype?: table, filename?: table }
----@alias SimplyFile.Opts { keymaps?: table<string, fun(dir: SimplyFile.Directory)>, border?: { main?: border_style, left?: border_style, right?: border_style, up?: border_style }, win_opt?: { main?: table, left?: table, right?: table, up?: table }, default_keymaps?: boolean, open_on_enter?: boolean, preview?: SimplyFile.PreviewOpts, clipboard?: SimplyFile.ClipboardOpts, filters?: SimplyFile.Filter, default_filter?: SimplyFile.DefaultFilter, sorts?: SimplyFile.Sort, default_sort?: SimplyFile.DefaultSort, icons?: SimplyFile.IconsOverride }
+---@alias SimplyFile.Margin { left: wrapped<integer>, right: wrapped<integer>, down: wrapped<integer>, up: wrapped<integer>}
+---@alias SimplyFile.Opts { margin?:SimplyFile.Margin, gap?: { v: wrapped<integer>, h: wrapped<integer> }, keymaps?: table<string, fun(dir: SimplyFile.Directory)>, border?: { main?: border_style, left?: border_style, right?: border_style, up?: border_style }, win_opt?: { main?: table, left?: table, right?: table, up?: table }, default_keymaps?: boolean, open_on_enter?: boolean, preview?: SimplyFile.PreviewOpts, clipboard?: SimplyFile.ClipboardOpts, filters?: SimplyFile.Filter, default_filter?: SimplyFile.DefaultFilter, sorts?: SimplyFile.Sort, default_sort?: SimplyFile.DefaultSort }
 
 ---@alias WinBuf { win: integer, buf: integer }
 ---@alias SimplyFile.UpBarOpts { events?: table<string, vim.api.keyset.create_autocmd>, callback?: fun(expl: SimplyFile.ExplState): table, table }
@@ -28,11 +27,14 @@ local po = util.percent_of
 function M.setup(opts)
   vim.g.simplyfile_config = vim.tbl_deep_extend("keep", opts or {}, {
     default_keymaps = true,
-    icons = {
-      filetype = {},
-      filename = {},
-    },
     keymaps = {},
+    gap = { h = 0, v = 0 },
+    margin = {
+      left = 5,
+      right = 5,
+      up = 1,
+      down = 1,
+    },
     border = {
       main = "double",
       left = "rounded",
@@ -184,6 +186,13 @@ function M.setup(opts)
   end
 end
 
+---override config option and reload the ui if opened
+---@param opts SimplyFile.Opts
+function M.reconfig(opts)
+  vim.g.simplyfile_config = vim.tbl_extend("force", vim.g.simplyfile_config, opts)
+  M.reload_ui()
+end
+
 ---open simplyfile on normalized [path]
 ---@param path? string folder path or nil for (the dirname of opened buffer name | current working directory)
 ---for normalize function
@@ -209,17 +218,33 @@ function M.open(path)
     path = vim.fn.getcwd(0) .. "/" .. path
   end
   path = util.trim_dot(vim.fs.normalize(path))
-  local height = po(80, vim.o.lines) - 3
-  local row = po(5, vim.o.lines) + 4
-  local half = po(30, vim.o.columns)
-  local col_offset = math.floor(half / 6) - 2
+  local vgap = util.callget(vim.g.simplyfile_config.gap.v)
+  local hgap = util.callget(vim.g.simplyfile_config.gap.h)
+  local margin = {}
+  margin.up = util.callget(vim.g.simplyfile_config.margin.up)
+  margin.down = util.callget(vim.g.simplyfile_config.margin.down) + 1
+  margin.left = util.callget(vim.g.simplyfile_config.margin.left)
+  margin.right = util.callget(vim.g.simplyfile_config.margin.right)
+  local lines = vim.o.lines - margin.up - margin.down
+  local ori_columns = vim.o.columns - margin.left - margin.right - 2
+  local part = math.floor(ori_columns / 3)
+  local mainw = part
+  local columns = part * 3
+  while columns ~= ori_columns do
+    mainw = mainw + 1
+    columns = columns + 1
+  end
 
   local up = {
     buf = vim.api.nvim_create_buf(false, true),
   }
   local up_none_border = vim.g.simplyfile_config.border.up == "none"
-  up.win = util.open_win((half * 3) + 4 + (up_none_border and 2 or 0), 1, row - 3 + (up_none_border and 2 or 0),
-    col_offset, up.buf, false)
+  up.win = util.open_win(
+    ori_columns + (up_none_border and 2 or 0),
+    1,
+    margin.up + (up_none_border and 1 or 0),
+    margin.left,
+    up.buf, false)
   util.win_edit_config(up.win, {
     border = vim.g.simplyfile_config.border.up
   })
@@ -231,9 +256,12 @@ function M.open(path)
     buf = vim.api.nvim_create_buf(false, true),
   }
   local left_none_border = vim.g.simplyfile_config.border.left == "none"
-  left.win = util.open_win(half + (left_none_border and 2 or 0), height + (left_none_border and 2 or 0), row, col_offset,
-    left.buf,
-    false)
+  left.win = util.open_win(
+    part - (left_none_border and 0 or 2) - hgap,
+    lines - 3 - vgap - (left_none_border and 0 or 2),
+    margin.up + 3 + vgap,
+    margin.left,
+    left.buf, false)
   util.win_edit_config(left.win, {
     border = vim.g.simplyfile_config.border.left,
   })
@@ -251,8 +279,11 @@ function M.open(path)
   local main = {
     buf = vim.api.nvim_create_buf(false, true),
   }
-  main.win = util.open_win(half + (main_none_border and 2 or 0), height + (main_none_border and 2 or 0), row,
-    half + 2 + col_offset,
+  main.win = util.open_win(
+    mainw + (main_none_border and 2 or 0),
+    lines - 3 - vgap - (main_none_border and 0 or 2),
+    margin.up + 3 + vgap,
+    margin.left + hgap + part - hgap,
     main.buf, true)
   util.win_edit_config(main.win,
     { title = " " .. vim.fs.basename(path), title_pos = "center", border = vim.g.simplyfile_config.border.main })
@@ -266,10 +297,12 @@ function M.open(path)
   }
   local right_none_border = vim.g.simplyfile_config.border.right == "none"
 
-  right.win = util.open_win(half + (right_none_border and 2 or 0), height + (right_none_border and 2 or 0), row,
-    (half * 2) + 4 + col_offset,
-    right.buf,
-    false)
+  right.win = util.open_win(
+    part - (right_none_border and 0 or 2) - hgap,
+    lines - 3 - vgap - (right_none_border and 0 or 2),
+    margin.up + 3 + vgap,
+    margin.left + (hgap * 2) + part + mainw + 2 - hgap,
+    right.buf, false)
   util.win_edit_config(right.win, { border = vim.g.simplyfile_config.border.right })
   for option, value in pairs(vim.g.simplyfile_config.win_opt.right) do
     vim.api.nvim_set_option_value(option, value, { win = right.win })
@@ -387,44 +420,7 @@ function M.open(path)
   vim.api.nvim_create_autocmd("VimResized", {
     group = vim.g.simplyfile_explorer.group_id,
     buffer = main.buf,
-    callback = function()
-      local height = po(80, vim.o.lines) - 3
-      local row = po(5, vim.o.lines) + 4
-      local col_offset = po(5, vim.o.columns) - 2
-      local half = po(30, vim.o.columns)
-
-      local up_none_border = vim.g.simplyfile_config.border.up == "none"
-      util.win_edit_config(up.win, {
-        width = (half * 3) + 4 + (up_none_border and 2 or 0),
-        height = 1,
-        row = row - 3 + (up_none_border and 2 or 0),
-        col = col_offset,
-      })
-
-      local left_none_border = vim.g.simplyfile_config.border.left == "none"
-      util.win_edit_config(left.win, {
-        width = half + (left_none_border and 2 or 0),
-        height = height + (left_none_border and 2 or 0),
-        row = row,
-        col = col_offset,
-      })
-
-      local main_none_border = vim.g.simplyfile_config.border.main == "none"
-      util.win_edit_config(main.win, {
-        width = half + (main_none_border and 2 or 0),
-        height = height + (main_none_border and 2 or 0),
-        row = row,
-        col = half + 2 + col_offset,
-      })
-
-      local right_none_border = vim.g.simplyfile_config.border.right == "none"
-      util.win_edit_config(right.win, {
-        width = half + (right_none_border and 2 or 0),
-        height = height + (right_none_border and 2 or 0),
-        row = row,
-        col = (half * 2) + 4 + col_offset,
-      })
-    end
+    callback = M.reload_ui,
   })
 
   if vim.g.simplyfile_config.default_keymaps then
@@ -449,6 +445,64 @@ function M.open(path)
 
   local exp = vim.g.simplyfile_explorer
   util.buf_locks(exp.up.buf, exp.main.buf, exp.left.buf, exp.right.buf)
+end
+
+---reload ui if explorer opened
+function M.reload_ui()
+  if not vim.g.simplyfile_explorer then return end
+  local up = vim.g.simplyfile_explorer.up
+  local left = vim.g.simplyfile_explorer.left
+  local right = vim.g.simplyfile_explorer.right
+  local main = vim.g.simplyfile_explorer.main
+
+  local vgap = util.callget(vim.g.simplyfile_config.gap.v)
+  local hgap = util.callget(vim.g.simplyfile_config.gap.h)
+  local margin = {}
+  margin.up = util.callget(vim.g.simplyfile_config.margin.up)
+  margin.down = util.callget(vim.g.simplyfile_config.margin.down) + 1
+  margin.left = util.callget(vim.g.simplyfile_config.margin.left)
+  margin.right = util.callget(vim.g.simplyfile_config.margin.right)
+  local lines = vim.o.lines - margin.up - margin.down
+  local ori_columns = vim.o.columns - margin.left - margin.right - 2
+  local part = math.floor(ori_columns / 3)
+  local mainw = part
+  local columns = part * 3
+  while columns ~= ori_columns do
+    mainw = mainw + 1
+    columns = columns + 1
+  end
+
+  local up_none_border = vim.g.simplyfile_config.border.up == "none"
+  util.win_edit_config(up.win, {
+    width  = ori_columns + (up_none_border and 2 or 0),
+    height = 1,
+    row    = margin.up + (up_none_border and 1 or 0),
+    col    = margin.left,
+  })
+
+  local left_none_border = vim.g.simplyfile_config.border.left == "none"
+  util.win_edit_config(left.win, {
+    width  = part - (left_none_border and 0 or 2) - hgap,
+    height = lines - 3 - vgap - (left_none_border and 0 or 2),
+    row    = margin.up + 3 + vgap,
+    col    = margin.left,
+  })
+
+  local main_none_border = vim.g.simplyfile_config.border.main == "none"
+  util.win_edit_config(main.win, {
+    width  = mainw + (main_none_border and 2 or 0),
+    height = lines - 3 - vgap - (main_none_border and 0 or 2),
+    row    = margin.up + 3 + vgap,
+    col    = margin.left + hgap + part - hgap,
+  })
+
+  local right_none_border = vim.g.simplyfile_config.border.right == "none"
+  util.win_edit_config(right.win, {
+    width  = part - (right_none_border and 0 or 2) - hgap,
+    height = lines - 3 - vgap - (right_none_border and 0 or 2),
+    row    = margin.up + 3 + vgap,
+    col    = margin.left + (hgap * 2) + part + mainw + 2 - hgap,
+  })
 end
 
 function M.close()

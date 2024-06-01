@@ -32,8 +32,6 @@ function M.dirs(path)
     icons_by_filename = devicon.get_icons_by_filename()
   end
 
-  icons_by_filename = vim.tbl_extend("force", icons_by_filename, vim.g.simplyfile_config.icons.filename)
-
   if vim.fn.isdirectory(path) then
     for name, type in vim.fs.dir(path, { depth = 1 }) do
       local icon = icons_by_filename[name]
