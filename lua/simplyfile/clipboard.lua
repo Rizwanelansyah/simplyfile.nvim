@@ -18,6 +18,18 @@ function M.contain(dir)
   return false
 end
 
+---get the method of dir if in register
+---@param dir SimplyFile.Directory
+---@return 'copy'|'cut'|nil
+function M.get_method(dir)
+  for _, reg in ipairs(M.registers) do
+    if reg.dir.absolute == dir.absolute then
+      return reg.method
+    end
+  end
+  return nil
+end
+
 function M.create_id()
   if #M.registers < 1 then
     return 1
@@ -32,6 +44,7 @@ function M.copy(dir)
   if not dir then return end
   if M.contain(dir) then return end
   table.insert(M.registers, { method = 'copy', dir = dir, id = M.create_id() } --[[@as SimplyFile.ClipboardRegister]])
+  vim.cmd("doautocmd User SimplyFileClipboardChange")
   if vim.g.simplyfile_config.clipboard.notify then
     vim.notify("copy " .. dir.name .. " added to clipboard")
   end
@@ -43,6 +56,7 @@ function M.cut(dir)
   if not dir then return end
   if M.contain(dir) then return end
   table.insert(M.registers, { method = 'cut', dir = dir, id = M.create_id() } --[[@as SimplyFile.ClipboardRegister]])
+  vim.cmd("doautocmd User SimplyFileClipboardChange")
   if vim.g.simplyfile_config.clipboard.notify then
     vim.notify("cut " .. dir.name .. " added to clipboard")
   end
@@ -91,6 +105,7 @@ function M.paste_last(dest, after)
   if vim.tbl_isempty(M.registers) then return end
   ---@type SimplyFile.ClipboardRegister
   local reg = table.remove(M.registers, #M.registers)
+  vim.cmd("doautocmd User SimplyFileClipboardChange")
   M.paste(reg, dest, after)
 end
 
@@ -109,17 +124,22 @@ function M.paste_select(dest, after)
     {
       title = "[ Clipboard ]",
       title_pos = "center",
-      footer =
-      "[ KeyMaps: d -> Delete, <CR> -> Select, <ESC> -> Exit, 1-9 -> Quick Select ]",
+      footer = "[ KeyMaps: d -> Delete, <CR> -> Select, <ESC> -> Exit, 1-9 -> Quick Select ]",
       footer_pos = "center"
     })
   for i, reg in ipairs(M.registers) do
     vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { "  " })
+    local hl
+    if reg.method == "copy" then
+      hl = "SimplyFileCopyMark"
+    elseif reg.method == "cut" then
+      hl = "SimplyFileCutMark"
+    end
     vim.api.nvim_buf_set_extmark(buf, ns, i - 1, 0, {
       id = reg.id,
       end_row = i - 1,
       end_col = 0,
-      virt_text = { { reg.method, "@method" }, spc, { reg.dir.icon, reg.dir.hl }, spc, { reg.dir.absolute, "@string" } },
+      virt_text = { { reg.method, hl }, spc, { reg.dir.icon, reg.dir.hl }, spc, { reg.dir.absolute, "@string" } },
       virt_text_pos = "inline",
     })
   end
@@ -135,6 +155,7 @@ function M.paste_select(dest, after)
     callback = function()
       local row = vim.api.nvim_win_get_cursor(0)[1]
       local reg = table.remove(M.registers, row)
+      vim.cmd("doautocmd User SimplyFileClipboardChange")
       vim.api.nvim_buf_del_extmark(buf, ns, reg.id)
       vim.api.nvim_del_current_line()
     end
@@ -143,6 +164,7 @@ function M.paste_select(dest, after)
     callback = function()
       local row = vim.api.nvim_win_get_cursor(0)[1]
       local reg = table.remove(M.registers, row)
+      vim.cmd("doautocmd User SimplyFileClipboardChange")
       close()
       if reg then
         M.paste(reg, dest, after)
@@ -153,6 +175,7 @@ function M.paste_select(dest, after)
     vim.api.nvim_buf_set_keymap(buf, 'n', tostring(i), "", {
       callback = function()
         local reg = table.remove(M.registers, i)
+        vim.cmd("doautocmd User SimplyFileClipboardChange")
         close()
         if reg then
           M.paste(reg, dest, after)

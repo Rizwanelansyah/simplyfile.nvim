@@ -130,6 +130,14 @@ function M.setup(opts)
   vim.g.simplyfile_explorer = nil
   vim.api.nvim_create_user_command("SimplyFileOpen", M.open, {})
   vim.api.nvim_create_user_command("SimplyFileClose", M.close, {})
+  local set_hl = function()
+    vim.api.nvim_set_hl(0, "SimplyFileCutMark", { fg = "#CC5555" })
+    vim.api.nvim_set_hl(0, "SimplyFileCopyMark", { fg = "#4095E4" })
+  end
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    callback = set_hl,
+  })
+  set_hl()
 
   local up_bar = vim.g.simplyfile_config.up_bar
   local opts = {
@@ -168,7 +176,7 @@ function M.setup(opts)
     vim.api.nvim_create_autocmd("VimEnter", {
       callback = function()
         local path = vim.api.nvim_buf_get_name(0)
-        if vim.fn.getfsize(path) == 0 then
+        if vim.fn.isdirectory(path) == 1 then
           M.open(path)
         end
       end
@@ -190,12 +198,11 @@ function M.open(path)
     if path == "" then
       path = vim.fn.getcwd(0)
     end
+  end
 
-    if vim.fn.isdirectory(path) == 0 then
-      cursor_on = path
-      path = vim.fs.dirname(path)
-    end
-    vim.print(path)
+  if vim.fn.isdirectory(path) == 0 then
+    cursor_on = path
+    path = vim.fs.dirname(path)
   end
 
   if not vim.startswith(path, "/") then
@@ -370,6 +377,13 @@ function M.open(path)
     end
   })
 
+  vim.api.nvim_create_autocmd("User", {
+    pattern = "SimplyFileClipboardChange",
+    callback = function()
+      mapping.redraw(vim.g.simplyfile_explorer.dirs[vim.api.nvim_win_get_cursor(main.win)[1]] or { absolute = "" })
+    end
+  })
+
   vim.api.nvim_create_autocmd("VimResized", {
     group = vim.g.simplyfile_explorer.group_id,
     buffer = main.buf,
@@ -425,7 +439,7 @@ function M.open(path)
 
   if vim.g.simplyfile_config.keymaps then
     for lhs, rhs in pairs(vim.g.simplyfile_config.keymaps) do
-      vim.api.nvim_buf_set_keymap(main.buf, 'n', lhs, "", {
+      vim.api.nvim_buf_set_keymap(main.buf, 'n', lhs, '', {
         callback = function()
           rhs(vim.g.simplyfile_explorer.dirs[vim.api.nvim_win_get_cursor(main.win)[1]])
         end,

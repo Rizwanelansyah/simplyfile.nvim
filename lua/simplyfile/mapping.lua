@@ -386,6 +386,16 @@ function M.reload_main(dir)
   for c, d in ipairs(dirs) do
     vim.api.nvim_buf_set_lines(main.buf, c - 1, c, false, { "  " .. d.icon .. " " .. d.name })
     vim.api.nvim_buf_add_highlight(main.buf, 0, d.hl, c - 1, 0, 5)
+    local method = clipboard.get_method(d)
+    if method then
+      local hl
+      if method == "cut" then
+        hl = "SimplyFileCutMark"
+      elseif method == 'copy' then
+        hl = "SimplyFileCopyMark"
+      end
+      vim.api.nvim_buf_add_highlight(main.buf, 0, hl, c - 1, 5, -1)
+    end
     if dir and d.absolute == dir.absolute then
       vim.api.nvim_win_set_cursor(main.win, { c, 0 })
     end
@@ -446,7 +456,7 @@ M.default = {
   c = clipboard.copy,
   x = clipboard.cut,
   v = M.paste,
-  V = M.paste_select,
+  ["<C-v>"] = M.paste_select,
   gc = M.go_to_cwd,
   ["<C-]>"] = M.under_cursor_as_cwd,
   ["<C-[>"] = M.current_path_as_cwd,
