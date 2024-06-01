@@ -189,10 +189,13 @@ function M.open(path)
     path = vim.api.nvim_buf_get_name(0)
     if path == "" then
       path = vim.fn.getcwd(0)
-    elseif vim.fn.getfsize(path) ~= 0 then
+    end
+
+    if vim.fn.isdirectory(path) == 0 then
       cursor_on = path
       path = vim.fs.dirname(path)
     end
+    vim.print(path)
   end
 
   if not vim.startswith(path, "/") then
@@ -307,43 +310,47 @@ function M.open(path)
     callback = function()
       local dir = vim.g.simplyfile_explorer.dirs[vim.api.nvim_win_get_cursor(main.win)[1]]
       if dir then
-        util.buf_unlocks(right.buf)
-        if not util.callget(vim.g.simplyfile_config.preview.show, dir) then
-          vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "--: This File/Folder is not shown by the config :--" })
-          vim.api.nvim_buf_add_highlight(right.buf, 0, "ErrorMsg", 0, 0, -1)
-          util.buf_locks(right.buf)
-          return
-        end
-        if not util.file_exists(dir.absolute) then return end
-        vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "" })
-        if dir.is_folder then
-          vim.api.nvim_set_option_value("filetype", "list_dir", {
-            buf = right.buf
-          })
-          local cur_dirs = util.dirs(dir.absolute)
-          for c, dir in ipairs(cur_dirs) do
-            vim.api.nvim_buf_set_lines(right.buf, c - 1, c, false, { "  " .. dir.icon .. " " .. dir.name })
-            vim.api.nvim_buf_add_highlight(right.buf, 0, dir.hl, c - 1, 0, 5)
+        vim.schedule(function()
+          util.buf_unlocks(right.buf)
+          if not util.callget(vim.g.simplyfile_config.preview.show, dir) then
+            vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "--: This File/Folder is not shown by the config :--" })
+            vim.api.nvim_buf_add_highlight(right.buf, 0, "ErrorMsg", 0, 0, -1)
+            util.buf_locks(right.buf)
+            return
           end
-        else
-          vim.api.nvim_set_option_value("filetype", dir.filetype, {
-            buf = right.buf
-          })
-          local max_lines = util.callget(vim.g.simplyfile_config.preview.max_lines)
-          local i = 0
-          for line in io.lines(dir.absolute) do
-            if i >= max_lines then
-              goto the_end
+          if not util.file_exists(dir.absolute) then return end
+          vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "" })
+          if dir.is_folder then
+            vim.api.nvim_set_option_value("filetype", "list_dir", {
+              buf = right.buf
+            })
+            local cur_dirs = util.dirs(dir.absolute)
+            for c, dir in ipairs(cur_dirs) do
+              vim.api.nvim_buf_set_lines(right.buf, c - 1, c, false, { "  " .. dir.icon .. " " .. dir.name })
+              vim.api.nvim_buf_add_highlight(right.buf, 0, dir.hl, c - 1, 0, 5)
             end
-            vim.api.nvim_buf_set_lines(right.buf, i, i + 1, false, { line })
-            i = i + 1
+          else
+            vim.api.nvim_set_option_value("filetype", dir.filetype, {
+              buf = right.buf
+            })
+            local max_lines = util.callget(vim.g.simplyfile_config.preview.max_lines)
+            local i = 0
+            local lines = {}
+            for line in io.lines(dir.absolute) do
+              if i >= max_lines then
+                goto the_end
+              end
+              table.insert(lines, line)
+              i = i + 1
+            end
+            ::the_end::
+            vim.api.nvim_buf_set_text(right.buf, 0, 0, -1, -1, lines)
           end
-          ::the_end::
-        end
-        if vim.g.simplyfile_config.border.right ~= "none" then
-          util.win_edit_config(right.win, { title = dir.icon .. " " .. dir.name, title_pos = "left" })
-        end
-        util.buf_unlocks(right.buf)
+          if vim.g.simplyfile_config.border.right ~= "none" then
+            util.win_edit_config(right.win, { title = dir.icon .. " " .. dir.name, title_pos = "left" })
+          end
+          util.buf_unlocks(right.buf)
+        end)
       else
         util.buf_unlocks(right.buf)
         vim.api.nvim_set_option_value("filetype", "empty", { buf = right.buf })
