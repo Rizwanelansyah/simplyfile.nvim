@@ -177,4 +177,17 @@ function M.callget(value, ...)
   end
 end
 
+---escape string that contain quote back slash
+---to make a valid file/folder name
+---@param str string
+---@return string
+function M.sanitize(str)
+  str = str
+    :gsub('\\','\\\\')
+    :gsub('"', '\\"')
+    :gsub("'", "\\'")
+    :gsub(" ", "\\ ")
+  return str
+end
+
 return M

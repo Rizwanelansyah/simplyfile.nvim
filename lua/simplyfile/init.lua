@@ -50,7 +50,7 @@ function M.setup(opts)
     up_bar = {
       events = {
         User = {
-          pattern = "SimplyFileStateChange"
+          pattern = { "SimplyFileStateChange", "SimplyFileClipboardChange" }
         },
         DirChanged = {
           pattern = "global"
@@ -84,6 +84,8 @@ function M.setup(opts)
         insert(left, search)
 
         local right = {}
+        insert(right, comp.clipboard())
+        table.insert(right, { " ", "NormalFloat" })
         insert(right, comp.cwd())
         table.insert(right, { " ", "NormalFloat" })
 
@@ -323,26 +325,28 @@ function M.open(path)
     sort = vim.g.simplyfile_config.default_sort,
     reverse_sort = false,
   }
-  mapping.reload_dirs()
-  local dirs = vim.g.simplyfile_explorer.dirs
+  -- mapping.reload_dirs()
+  -- local dirs = vim.g.simplyfile_explorer.dirs
+  ---@diagnostic disable-next-line: missing-fields
+  mapping.refresh({ absolute = cursor_on })
 
-  for c, dir in ipairs(dirs) do
-    vim.api.nvim_buf_set_lines(main.buf, c - 1, c, false, { "  " .. dir.icon .. " " .. dir.name })
-    vim.api.nvim_buf_add_highlight(main.buf, 0, dir.hl, c - 1, 0, 5)
-    if dir.absolute == cursor_on then
-      vim.api.nvim_win_set_cursor(main.win, { c, 0 })
-    end
-  end
-
-  local parent_dirs = util.dirs(vim.fs.dirname(path))
-  for i, dir in ipairs(parent_dirs) do
-    vim.api.nvim_buf_set_lines(left.buf, i - 1, i, false, { "  " .. dir.icon .. " " .. dir.name })
-    vim.api.nvim_buf_add_highlight(left.buf, 0, dir.hl, i - 1, 0, 5)
-    if dir.absolute == path then
-      vim.api.nvim_buf_add_highlight(left.buf, 0, "CursorLine", i - 1, 0, -1)
-      vim.api.nvim_win_set_cursor(left.win, { i, 0 })
-    end
-  end
+  -- for c, dir in ipairs(dirs) do
+  --   vim.api.nvim_buf_set_lines(main.buf, c - 1, c, false, { "  " .. dir.icon .. " " .. dir.name })
+  --   vim.api.nvim_buf_add_highlight(main.buf, 0, dir.hl, c - 1, 0, 5)
+  --   if dir.absolute == cursor_on then
+  --     vim.api.nvim_win_set_cursor(main.win, { c, 0 })
+  --   end
+  -- end
+  --
+  -- local parent_dirs = util.dirs(vim.fs.dirname(path))
+  -- for i, dir in ipairs(parent_dirs) do
+  --   vim.api.nvim_buf_set_lines(left.buf, i - 1, i, false, { "  " .. dir.icon .. " " .. dir.name })
+  --   vim.api.nvim_buf_add_highlight(left.buf, 0, dir.hl, i - 1, 0, 5)
+  --   if dir.absolute == path then
+  --     vim.api.nvim_buf_add_highlight(left.buf, 0, "CursorLine", i - 1, 0, -1)
+  --     vim.api.nvim_win_set_cursor(left.win, { i, 0 })
+  --   end
+  -- end
 
   vim.api.nvim_create_autocmd("CursorMoved", {
     group = vim.g.simplyfile_explorer.group_id,
@@ -413,7 +417,9 @@ function M.open(path)
   vim.api.nvim_create_autocmd("User", {
     pattern = "SimplyFileClipboardChange",
     callback = function()
-      mapping.redraw(vim.g.simplyfile_explorer.dirs[vim.api.nvim_win_get_cursor(main.win)[1]] or { absolute = "" })
+      if not vim.g.simplyfile_explorer then return end
+      local win = vim.g.simplyfile_explorer.main.win
+      mapping.redraw(vim.g.simplyfile_explorer.dirs[vim.api.nvim_win_get_cursor(win)[1]] or { absolute = "" })
     end
   })
 

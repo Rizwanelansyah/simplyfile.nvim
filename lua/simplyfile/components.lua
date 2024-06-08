@@ -1,4 +1,5 @@
 local M = {}
+local clipboard = require("simplyfile.clipboard")
 
 ---filter indicator for styling
 ---@param expl SimplyFile.ExplState
@@ -47,6 +48,37 @@ function M.cwd()
     cwd = cwd:gsub("^" .. home, "~", 1)
   end
   return { { "CWD: ", "@field" }, { cwd, "@string" } }
+end
+
+function M.clipboard()
+  local comps = {}
+  if #clipboard.registers > 0 then
+    table.insert(comps, { " :", "@field" })
+    local counts = {
+      copy = 0,
+      cut = 0,
+    }
+    for _, reg in ipairs(clipboard.registers) do
+      counts[reg.method] = (counts[reg.method] or 0) + 1
+    end
+    if counts.copy > 0 then
+      table.insert(comps, { " " .. counts.copy, "@number" })
+      if counts.copy > 1 then
+        table.insert(comps, { " copies", "@method" })
+      else
+        table.insert(comps, { " copy", "@method" })
+      end
+    end
+    if counts.cut > 0 then
+      table.insert(comps, { " " .. counts.cut, "@number" })
+      if counts.cut > 1 then
+        table.insert(comps, { " cuts", "@method" })
+      else
+        table.insert(comps, { " cut", "@method" })
+      end
+    end
+  end
+  return comps
 end
 
 return M

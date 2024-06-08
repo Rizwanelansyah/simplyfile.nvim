@@ -30,6 +30,22 @@ function M.get_method(dir)
   return nil
 end
 
+---remove dir if in register
+---@param dir SimplyFile.Directory
+function M.remove_from_clipboard(dir)
+  if not dir then return end
+  for i, reg in ipairs(M.registers) do
+    if reg.dir.absolute == dir.absolute then
+      table.remove(M.registers, i)
+      vim.cmd("doautocmd User SimplyFileClipboardChange")
+      local pos = vim.api.nvim_win_get_cursor(0)
+      local len = #vim.g.simplyfile_explorer.dirs
+      vim.api.nvim_win_set_cursor(0, { pos[1] == len and pos[1] or pos[1] + 1, 0 })
+      return
+    end
+  end
+end
+
 function M.create_id()
   if #M.registers < 1 then
     return 1
@@ -45,6 +61,9 @@ function M.copy(dir)
   if M.contain(dir) then return end
   table.insert(M.registers, { method = 'copy', dir = dir, id = M.create_id() } --[[@as SimplyFile.ClipboardRegister]])
   vim.cmd("doautocmd User SimplyFileClipboardChange")
+  local pos = vim.api.nvim_win_get_cursor(0)
+  local len = #vim.g.simplyfile_explorer.dirs
+  vim.api.nvim_win_set_cursor(0, { pos[1] == len and pos[1] or pos[1] + 1, 0 })
   if vim.g.simplyfile_config.clipboard.notify then
     vim.notify("copy " .. dir.name .. " added to clipboard")
   end
@@ -57,6 +76,9 @@ function M.cut(dir)
   if M.contain(dir) then return end
   table.insert(M.registers, { method = 'cut', dir = dir, id = M.create_id() } --[[@as SimplyFile.ClipboardRegister]])
   vim.cmd("doautocmd User SimplyFileClipboardChange")
+  local pos = vim.api.nvim_win_get_cursor(0)
+  local len = #vim.g.simplyfile_explorer.dirs
+  vim.api.nvim_win_set_cursor(0, { pos[1] == len and pos[1] or pos[1] + 1, 0 })
   if vim.g.simplyfile_config.clipboard.notify then
     vim.notify("cut " .. dir.name .. " added to clipboard")
   end

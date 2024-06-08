@@ -152,15 +152,15 @@ function M.add()
     if vim.endswith(new_dir, "/") then
       if vim.fn.executable("mkdir") then
         new_dir = new_dir:sub(1, -2)
-        vim.cmd("silent !mkdir -p " .. new_dir)
+        vim.cmd("silent !mkdir -p " .. util.sanitize(new_dir))
         ---@diagnostic disable-next-line: missing-fields
         M.refresh { absolute = new_dir }
       end
     else
       if vim.fn.executable("touch") and vim.fn.executable("mkdir") then
         local folder = vim.fs.dirname(new_dir)
-        vim.cmd("silent !mkdir -p " .. folder)
-        vim.cmd("silent !touch " .. new_dir)
+        vim.cmd("silent !mkdir -p " .. util.sanitize(folder))
+        vim.cmd("silent !touch " .. util.sanitize(new_dir))
         ---@diagnostic disable-next-line: missing-fields
         M.refresh { absolute = new_dir }
       end
@@ -188,7 +188,7 @@ function M.delete(dir)
   vim.ui.select({ "No", "Yes" },
     { prompt = "Are You Sure Wanna Delete '" .. dir.icon .. " " .. dir.name .. "' Permanently? " }, function(item)
       if item == "Yes" then
-        os.remove(dir.absolute)
+        os.remove(util.sanitize(dir.absolute))
         ---@diagnostic disable-next-line: missing-fields
         M.refresh { absolute = "" }
         vim.api.nvim_win_set_cursor(0, { pos[1] > 1 and pos[1] - 1 or 1, pos[2] })
@@ -281,7 +281,9 @@ end
 function M.search()
   local config = vim.api.nvim_win_get_config(vim.g.simplyfile_explorer.up.win)
   local buf = vim.api.nvim_create_buf(false, true)
-  local win = vim.api.nvim_open_win(buf, true, config)
+  local win = vim.api.nvim_open_win(buf, true, vim.tbl_extend('force', config, {
+    style = "minimal",
+  }))
   local ns = vim.api.nvim_create_namespace("SimplyFile")
   local text = "  : "
 
@@ -455,6 +457,7 @@ M.default = {
   ["<C-o>"] = M.toggle_reverse_sort,
   c = clipboard.copy,
   x = clipboard.cut,
+  R = clipboard.remove_from_clipboard,
   v = M.paste,
   V = M.paste_select,
   gc = M.go_to_cwd,
