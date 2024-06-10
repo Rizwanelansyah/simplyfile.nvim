@@ -10,7 +10,7 @@ local comp = require("simplyfile.components")
 ---@alias SimplyFile.Show boolean | fun(dir: SimplyFile.Directory): boolean
 
 ---@alias SimplyFile.ClipboardOpts { notify?: boolean }
----@alias SimplyFile.PreviewOpts { show?: SimplyFile.Show, max_lines?: wrapped<integer> }
+---@alias SimplyFile.PreviewOpts { show?: SimplyFile.Show, max_lines?: wrapped<integer>, image?: boolean, is_image?: fun(dir: SimplyFile.Directory): boolean }
 ---@alias SimplyFile.Filter table<string, fun(dir: SimplyFile.Directory): boolean>
 ---@alias SimplyFile.DefaultFilter string | fun(dir: SimplyFile.Directory): boolean
 ---@alias SimplyFile.Sort table<string, fun(a: SimplyFile.Directory, b: SimplyFile.Directory): boolean>
@@ -97,7 +97,11 @@ function M.setup(opts)
       show = true,
       max_lines = function()
         return vim.o.lines
-      end
+      end,
+      image = false,
+      is_image = function(dir)
+        return util.matches(dir.name, { "%.png$", "%.jpe?g$", "%.gif$", "%.webp$", "%.avif$" })
+      end,
     },
     clipboard = {
       notify = false,
@@ -186,12 +190,22 @@ function M.setup(opts)
       end
     })
   end
+
+  if vim.g.simplyfile_config.preview.image then
+    local ok, _ = pcall(require, "image")
+    if not ok then
+      vim.notify(
+        "[preview image disabled]: image.nvim plugin not installed if you want previewing image please install 3rd/image.nvim first",
+        vim.log.levels.ERROR)
+      M.reconfig { preview = { image = false } }
+    end
+  end
 end
 
 ---override config option and reload the ui if opened
 ---@param opts SimplyFile.Opts
 function M.reconfig(opts)
-  vim.g.simplyfile_config = vim.tbl_extend("force", vim.g.simplyfile_config, opts)
+  vim.g.simplyfile_config = vim.tbl_deep_extend("force", vim.g.simplyfile_config, opts)
   M.reload_ui()
 end
 
@@ -337,6 +351,15 @@ function M.open(path)
       if dir then
         vim.schedule(function()
           util.buf_unlocks(right.buf)
+          local draw_image = vim.g.simplyfile_config.preview.image
+          if draw_image then
+            if vim.api.nvim_get_option_value("filetype", { buf = right.buf }) == "image_preview" then
+              local images = require("image").get_images { window = right.win }
+              for _, img in ipairs(images) do
+                img:clear()
+              end
+            end
+          end
           if not util.callget(vim.g.simplyfile_config.preview.show, dir) then
             vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "--: This File/Folder is not shown by the config :--" })
             vim.api.nvim_buf_add_highlight(right.buf, 0, "ErrorMsg", 0, 0, -1)
@@ -355,21 +378,27 @@ function M.open(path)
               vim.api.nvim_buf_add_highlight(right.buf, 0, dir.hl, c - 1, 0, 5)
             end
           else
-            vim.api.nvim_set_option_value("filetype", dir.filetype, {
-              buf = right.buf
-            })
-            local max_lines = util.callget(vim.g.simplyfile_config.preview.max_lines)
-            local i = 0
-            local lines = {}
-            for line in io.lines(dir.absolute) do
-              if i >= max_lines then
-                goto the_end
+            if (not draw_image) or (not vim.g.simplyfile_config.preview.is_image(dir)) then
+              vim.api.nvim_set_option_value("filetype", dir.filetype, {
+                buf = right.buf
+              })
+              local max_lines = util.callget(vim.g.simplyfile_config.preview.max_lines)
+              local i = 0
+              local lines = {}
+              for line in io.lines(dir.absolute) do
+                if i >= max_lines then
+                  break
+                end
+                table.insert(lines, line)
+                i = i + 1
               end
-              table.insert(lines, line)
-              i = i + 1
+              vim.api.nvim_buf_set_text(right.buf, 0, 0, -1, -1, lines)
+            else
+              vim.api.nvim_set_option_value("filetype", "image_preview", {
+                buf = right.buf
+              })
+              require("image").from_file(dir.absolute, { window = right.win, buffer = right.buf }):render()
             end
-            ::the_end::
-            vim.api.nvim_buf_set_text(right.buf, 0, 0, -1, -1, lines)
           end
           if vim.g.simplyfile_config.border.right ~= "none" then
             util.win_edit_config(right.win, { title = dir.icon .. " " .. dir.name, title_pos = "left" })
@@ -490,10 +519,33 @@ function M.reload_ui()
     row    = margin.up + 3 + vgap,
     col    = margin.left + (hgap * 2) + part + mainw + 2 - hgap,
   })
+
+  if vim.g.simplyfile_config.preview.image then
+    if vim.api.nvim_get_option_value("filetype", { buf = right.buf }) == "image_preview" then
+      vim.schedule(function()
+        local images = require("image").get_images { window = right.win }
+        for _, img in ipairs(images) do
+          local new_img = require("image").from_file(img.path, { window = right.win, buffer = right.buf })
+          img:clear()
+          new_img:render()
+        end
+      end)
+    end
+  end
 end
 
 function M.close()
   if vim.g.simplyfile_explorer then
+    local draw_image = vim.g.simplyfile_config.preview.preview_image
+    if draw_image then
+      if vim.api.nvim_get_option_value("filetype", { buf = vim.g.simplyfile_explorer.right.buf }) == "image_preview" then
+        local images = require("image").get_images { window = vim.g.simplyfile_explorer.right.win }
+        for _, img in ipairs(images) do
+          img:clear()
+        end
+      end
+    end
+
     vim.api.nvim_del_augroup_by_id(vim.g.simplyfile_explorer.group_id)
     pcall(vim.api.nvim_win_close, vim.g.simplyfile_explorer.up.win, true)
     pcall(vim.api.nvim_buf_delete, vim.g.simplyfile_explorer.up.buf, { force = true })

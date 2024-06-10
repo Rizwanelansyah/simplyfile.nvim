@@ -26,10 +26,12 @@ function M.dirs(path)
   local dirs = {}
   local files = {}
   local icons_by_filename = {}
+  local icons_by_extension = {}
   local ok, devicon = pcall(require, "nvim-web-devicons")
 
   if ok then
     icons_by_filename = devicon.get_icons_by_filename()
+    icons_by_extension = devicon.get_icons_by_extension()
   end
 
   if vim.fn.isdirectory(path) then
@@ -43,7 +45,13 @@ function M.dirs(path)
         local i, h = devicon.get_icon_by_filetype(filetype, { default = true })
         hl = h
         icon = { icon = i }
-      else
+      end
+      if (not icon) and ok then
+        local splitted_name = vim.split(name, "%.")
+        icon = icons_by_extension[splitted_name[#splitted_name]] or { icon = "" }
+        hl = get_highlight_name(icon)
+      end
+      if not icon then
         icon = { icon = "" }
       end
 
@@ -191,6 +199,17 @@ function M.sanitize(str)
     :gsub("'", "\\'")
     :gsub(" ", "\\ ")
   return str
+end
+
+---test if the {string} match one of the pattern in {patterns}
+---@param str string
+---@param patterns string[]
+---@return boolean
+function M.matches(str, patterns)
+  for _, pat in ipairs(patterns or {}) do
+    if str:match(pat) then return true end
+  end
+  return false
 end
 
 return M
