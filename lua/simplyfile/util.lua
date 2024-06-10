@@ -48,13 +48,16 @@ function M.dirs(path)
       end
 
       local is_folder = false
-      if type == 'directory' or type == 'link' then
+      if vim.fn.isdirectory(vim.fs.normalize(path) .. "/" .. name) == 1 then
         is_folder = true
         icon = {
-          icon = type == 'directory' and "" or "󱅷",
+          icon = "",
         }
         hl = "Directory"
         filetype = 'directory'
+      end
+      if type == "link" then
+        icon = { icon = is_folder and "" or "󱅷" }
       end
 
       if is_folder then

@@ -430,10 +430,10 @@ function M.redraw(dir)
   end
 
   if vim.g.simplyfile_config.border.main ~= "none" then
-    util.win_edit_config(main.win, { title = " " .. vim.fs.basename(path), title_pos = "center" })
+    util.win_edit_config(main.win, { title = " " .. vim.fs.basename(path), title_pos = "center" })
   end
   if vim.g.simplyfile_config.border.left ~= "none" then
-    util.win_edit_config(left.win, { title = " " .. vim.fs.basename(parent_path), title_pos = "right" })
+    util.win_edit_config(left.win, { title = " " .. vim.fs.basename(parent_path), title_pos = "right" })
   end
   util.buf_locks(main.buf, left.buf)
 end
