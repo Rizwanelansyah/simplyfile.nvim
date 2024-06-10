@@ -8,6 +8,7 @@ simple file explorer plugin for neovim
 - neovim 0.9.5 or higher
 - [patched font](https://www.nerdfonts.com/)
 - (optional) [nvim-tree-webdevicons](https://github.com/nvim-tree/nvim-web-devicons)
+- (optional for enabling image preview) [image.nvim](https://github.com/3rd/image.nvim)
 
 ## installation
 With [lazy.nvim](https://github.com/folke/lazy.nvim)
@@ -35,7 +36,10 @@ require("simplyfile").setup {
         --- filetype: type of file
         --- is_folder: folder or not
         ["lhs"] = function(dir) --[[ some code ]] end
-    }
+    },
+    preview = {
+        image = true, -- for previewing image (for v0.7+ only)
+    },
 }
 ```
 
