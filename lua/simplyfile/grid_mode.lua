@@ -6,7 +6,8 @@ local util = require("simplyfile.util")
 ---@param main { buf: integer, win: integer }
 ---@param dirs SimplyFile.Directory[]
 ---@param reload_image? boolean
-function M.render(main, dirs, reload_image)
+---@param cursor_on? SimplyFile.Directory
+function M.render(main, dirs, reload_image, cursor_on)
   if reload_image == nil then
     reload_image = true
   end
@@ -32,23 +33,26 @@ function M.render(main, dirs, reload_image)
   local padding = vim.g.simplyfile_config.grid_mode.padding
   local fallback = vim.g.simplyfile_config.grid_mode.fallback_image
   local xmax = math.floor((mconf.width - (padding * 4) + (gap * 2)) / ((size * 2) + (gap * 2) + (ipad * 2)))
-  local ymax = math.floor((mconf.height - (padding * 2) + gap) / (size + 1 + gap + ipad))
+  local ymax = math.floor((mconf.height - (padding * 2)) / (size + 1 + gap + ipad))
   local col = 1
   local row = 1
   local row_off = 0
   local col_off = 0
-  if sel[1] < 1 then
-    sel[1] = 1
-  end
-  if sel[2] < 1 then
-    sel[2] = 1
-  end
 
   local ns = vim.api.nvim_create_namespace("SimplyFileGridMode")
   vim.api.nvim_buf_clear_namespace(main.buf, ns, 0, -1)
   util.buf_unlocks(main.buf)
   for i = 1, mconf.height * 2 do
     vim.api.nvim_buf_set_lines(main.buf, i - 1, i, false, { ((" "):rep(mconf.width)) })
+  end
+
+  if cursor_on then
+    local filtered = vim.tbl_filter(function(dir) return dir.absolute == cursor_on.absolute end, dirs)
+    if #filtered == 0 then
+      cursor_on = nil
+      sel[1] = 1
+      sel[2] = 1
+    end
   end
   for _, value in ipairs(dirs) do
     local x = (padding * 2) + col_off
@@ -79,7 +83,22 @@ function M.render(main, dirs, reload_image)
       { util.text_center(value.name, col_end - x) }
     )
 
-    if row == sel[1] and col == sel[2] then
+    if cursor_on and value.absolute == cursor_on.absolute then
+      for i = y + 1, y + size + 1 + ipad do
+        vim.api.nvim_buf_add_highlight(
+          main.buf,
+          ns,
+          "CursorLine",
+          i - 1,
+          x,
+          col_end
+        )
+      end
+      sel[1] = row
+      sel[2] = col
+    end
+
+    if not cursor_on and row == sel[1] and col == sel[2] then
       for i = y + 1, y + size + 1 + ipad do
         vim.api.nvim_buf_add_highlight(
           main.buf,
@@ -105,7 +124,8 @@ function M.render(main, dirs, reload_image)
     end
   end
   util.override_state {
-    grid_pos = sel
+    grid_pos = sel,
+    grid_cols = xmax,
   }
   util.buf_locks(main.buf)
 end
