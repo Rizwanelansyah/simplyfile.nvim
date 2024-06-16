@@ -9,7 +9,7 @@ local comp = require("simplyfile.components")
 ---@alias border_style "double" | "single" | "none" | "solid" | "rounded" | "shadow" | string[] | string[][]
 ---@alias SimplyFile.Show boolean | fun(dir: SimplyFile.Directory): boolean
 
----@alias SimplyFile.GridModeOpts { fallback_image: string, gap?: integer, size?: integer, padding?: integer, icon_path: (fun(dir: SimplyFile.Directory): string), enabled?: boolean }
+---@alias SimplyFile.GridModeOpts { fallback_image: string, icon_padding?: integer, gap?: integer, size?: integer, padding?: integer, icon_path: (fun(dir: SimplyFile.Directory): string), enabled?: boolean }
 ---@alias SimplyFile.ClipboardOpts { notify?: boolean }
 ---@alias SimplyFile.PreviewOpts { show?: SimplyFile.Show, max_lines?: wrapped<integer>, image?: boolean, is_image?: fun(dir: SimplyFile.Directory): boolean }
 ---@alias SimplyFile.Filter table<string, fun(dir: SimplyFile.Directory): boolean>
@@ -21,7 +21,7 @@ local comp = require("simplyfile.components")
 
 ---@alias WinBuf { win: integer, buf: integer }
 ---@alias SimplyFile.UpBarOpts { events?: table<string, vim.api.keyset.create_autocmd>, callback?: fun(expl: SimplyFile.ExplState): table, table }
----@alias SimplyFile.ExplState { left: WinBuf, main: WinBuf, right: WinBuf, up: WinBuf, dirs: SimplyFile.Directory[], path: string, group_id: integer, search: string, filter: SimplyFile.DefaultFilter, reverse_filter: boolean, sort: SimplyFile.DefaultSort, reverse_sort: boolean, up_bar?: SimplyFile.UpBarOpts }
+---@alias SimplyFile.ExplState { grid_pos: integer[], left: WinBuf, main: WinBuf, right: WinBuf, up: WinBuf, dirs: SimplyFile.Directory[], path: string, group_id: integer, search: string, filter: SimplyFile.DefaultFilter, reverse_filter: boolean, sort: SimplyFile.DefaultSort, reverse_sort: boolean, up_bar?: SimplyFile.UpBarOpts }
 
 ---setup the simplyfile plugin
 ---@param opts SimplyFile.Opts?
@@ -32,9 +32,10 @@ function M.setup(opts)
     gap = { h = 0, v = 0 },
     grid_mode = {
       enabled = false,
-      gap = 2,
-      size = 3,
+      gap = 1,
+      size = 4,
       padding = 1,
+      icon_padding = 1,
     },
     margin = {
       left = 5,
@@ -148,6 +149,8 @@ function M.setup(opts)
   local set_hl = function()
     vim.api.nvim_set_hl(0, "SimplyFileCutMark", { fg = "#CC5555" })
     vim.api.nvim_set_hl(0, "SimplyFileCopyMark", { fg = "#4095E4" })
+    vim.api.nvim_set_hl(0, "SimplyFileCutMarkGridMode", { bg = "#CC5555", fg = "black" })
+    vim.api.nvim_set_hl(0, "SimplyFileCopyMarkGridMode", { bg = "#4095E4", fg = "black" })
   end
   vim.api.nvim_create_autocmd("ColorScheme", {
     callback = set_hl,
@@ -353,97 +356,44 @@ function M.open(path)
     reverse_filter = false,
     sort = vim.g.simplyfile_config.default_sort,
     reverse_sort = false,
+    grid_pos = {1, 1},
+    grid_selected = nil,
   }
 
   ---@diagnostic disable-next-line: missing-fields
   mapping.refresh({ absolute = cursor_on })
 
-  vim.api.nvim_create_autocmd("CursorMoved", {
-    group = vim.g.simplyfile_explorer.group_id,
-    buffer = main.buf,
-    callback = function()
-      local dir = M.get_dir()
-      if dir then
-        vim.schedule(function()
-          util.buf_unlocks(right.buf)
-          local draw_image = vim.g.simplyfile_config.preview.image
-          if draw_image then
-            if vim.api.nvim_get_option_value("filetype", { buf = right.buf }) == "image_preview" then
-              local images = require("image").get_images { window = right.win }
-              for _, img in ipairs(images) do
-                img:clear()
-              end
-            end
-          end
-          if not util.callget(vim.g.simplyfile_config.preview.show, dir) then
-            vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "--: This File/Folder is not shown by the config :--" })
-            vim.api.nvim_buf_add_highlight(right.buf, 0, "ErrorMsg", 0, 0, -1)
-            util.buf_locks(right.buf)
-            return
-          end
-          if not util.file_exists(dir.absolute) then return end
-          vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "" })
-          if dir.is_folder then
-            vim.api.nvim_set_option_value("filetype", "list_dir", {
-              buf = right.buf
-            })
-            local cur_dirs = util.dirs(dir.absolute)
-            for c, dir in ipairs(cur_dirs) do
-              vim.api.nvim_buf_set_lines(right.buf, c - 1, c, false, { "  " .. dir.icon .. " " .. dir.name })
-              vim.api.nvim_buf_add_highlight(right.buf, 0, dir.hl, c - 1, 0, 5)
-            end
-          else
-            if (not draw_image) or (not vim.g.simplyfile_config.preview.is_image(dir)) then
-              vim.api.nvim_set_option_value("filetype", dir.filetype, {
-                buf = right.buf
-              })
-              local max_lines = util.callget(vim.g.simplyfile_config.preview.max_lines)
-              local i = 0
-              local lines = {}
-              for line in io.lines(dir.absolute) do
-                if i >= max_lines then
-                  break
-                end
-                table.insert(lines, line)
-                i = i + 1
-              end
-              vim.api.nvim_buf_set_text(right.buf, 0, 0, -1, -1, lines)
-            else
-              vim.api.nvim_set_option_value("filetype", "image_preview", {
-                buf = right.buf
-              })
-              require("image").from_file(dir.absolute, { window = right.win, buffer = right.buf }):render()
-            end
-          end
-          if vim.g.simplyfile_config.border.right ~= "none" then
-            util.win_edit_config(right.win, { title = dir.icon .. " " .. dir.name, title_pos = "left" })
-          end
-          util.buf_unlocks(right.buf)
-        end)
-      else
-        util.buf_unlocks(right.buf)
-        vim.api.nvim_set_option_value("filetype", "empty", { buf = right.buf })
-        vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "" })
-        if vim.g.simplyfile_config.border.right ~= "none" then
-          util.win_edit_config(right.win, { title = "", title_pos = "left" })
-        end
-        util.buf_locks(right.buf)
+  if vim.g.simplyfile_config.grid_mode.enabled then
+    vim.api.nvim_create_autocmd("CursorMoved", {
+      group = vim.g.simplyfile_explorer.group_id,
+      buffer = main.buf,
+      callback = function()
+        vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
       end
-    end
-  })
+    })
+  else
+    vim.api.nvim_create_autocmd("CursorMoved", {
+      group = vim.g.simplyfile_explorer.group_id,
+      buffer = main.buf,
+      callback = function()
+        local dir = M.get_dir()
+        M.preview(dir)
+      end
+    })
+
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "SimplyFileClipboardChange",
+      callback = function()
+        if not vim.g.simplyfile_explorer then return end
+        mapping.redraw(M.get_dir() or { absolute = "" })
+      end
+    })
+  end
 
   vim.api.nvim_create_autocmd("WinClosed", {
     buffer = main.buf,
     callback = function()
       M.close()
-    end
-  })
-
-  vim.api.nvim_create_autocmd("User", {
-    pattern = "SimplyFileClipboardChange",
-    callback = function()
-      if not vim.g.simplyfile_explorer then return end
-      mapping.redraw(M.get_dir() or { absolute = "" })
     end
   })
 
@@ -454,7 +404,7 @@ function M.open(path)
   })
 
   if vim.g.simplyfile_config.default_keymaps then
-    for lhs, rhs in pairs(mapping.default) do
+    for lhs, rhs in pairs(mapping.get_default()) do
       vim.api.nvim_buf_set_keymap(main.buf, 'n', lhs, "", {
         callback = function()
           rhs(M.get_dir())
@@ -475,6 +425,79 @@ function M.open(path)
 
   local exp = vim.g.simplyfile_explorer
   util.buf_locks(exp.up.buf, exp.main.buf, exp.left.buf, exp.right.buf)
+end
+
+---show {dir} on preview
+---@param dir? SimplyFile.Directory
+function M.preview(dir)
+  if not vim.g.simplyfile_explorer then return end
+  local right = vim.g.simplyfile_explorer.right
+  if dir then
+    vim.schedule(function()
+      util.buf_unlocks(right.buf)
+      local draw_image = vim.g.simplyfile_config.preview.image
+      if draw_image then
+        if vim.api.nvim_get_option_value("filetype", { buf = right.buf }) == "image_preview" then
+          local images = require("image").get_images { window = right.win }
+          for _, img in ipairs(images) do
+            img:clear()
+          end
+        end
+      end
+      if not util.callget(vim.g.simplyfile_config.preview.show, dir) then
+        vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "--: This File/Folder is not shown by the config :--" })
+        vim.api.nvim_buf_add_highlight(right.buf, 0, "ErrorMsg", 0, 0, -1)
+        util.buf_locks(right.buf)
+        return
+      end
+      if not util.file_exists(dir.absolute) then return end
+      vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "" })
+      if dir.is_folder then
+        vim.api.nvim_set_option_value("filetype", "list_dir", {
+          buf = right.buf
+        })
+        local cur_dirs = util.dirs(dir.absolute)
+        for c, dir in ipairs(cur_dirs) do
+          vim.api.nvim_buf_set_lines(right.buf, c - 1, c, false, { "  " .. dir.icon .. " " .. dir.name })
+          vim.api.nvim_buf_add_highlight(right.buf, 0, dir.hl, c - 1, 0, 5)
+        end
+      else
+        if (not draw_image) or (not vim.g.simplyfile_config.preview.is_image(dir)) then
+          vim.api.nvim_set_option_value("filetype", dir.filetype, {
+            buf = right.buf
+          })
+          local max_lines = util.callget(vim.g.simplyfile_config.preview.max_lines)
+          local i = 0
+          local lines = {}
+          for line in io.lines(dir.absolute) do
+            if i >= max_lines then
+              break
+            end
+            table.insert(lines, line)
+            i = i + 1
+          end
+          vim.api.nvim_buf_set_text(right.buf, 0, 0, -1, -1, lines)
+        else
+          vim.api.nvim_set_option_value("filetype", "image_preview", {
+            buf = right.buf
+          })
+          require("image").from_file(dir.absolute, { window = right.win, buffer = right.buf }):render()
+        end
+      end
+      if vim.g.simplyfile_config.border.right ~= "none" then
+        util.win_edit_config(right.win, { title = dir.icon .. " " .. dir.name, title_pos = "left" })
+      end
+      util.buf_unlocks(right.buf)
+    end)
+  else
+    util.buf_unlocks(right.buf)
+    vim.api.nvim_set_option_value("filetype", "empty", { buf = right.buf })
+    vim.api.nvim_buf_set_lines(right.buf, 0, -1, false, { "" })
+    if vim.g.simplyfile_config.border.right ~= "none" then
+      util.win_edit_config(right.win, { title = "", title_pos = "left" })
+    end
+    util.buf_locks(right.buf)
+  end
 end
 
 ---reload ui if explorer opened

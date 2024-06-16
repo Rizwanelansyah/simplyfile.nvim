@@ -11,6 +11,13 @@ local function get_highlight_name(data)
   return "DevIcon" .. data.name
 end
 
+---override field on {vim.g.simplyfile_explorer}
+---@param value SimplyFile.ExplState
+function M.override_state(value)
+  vim.g.simplyfile_explorer = vim.tbl_extend("force", vim.g.simplyfile_explorer, value)
+  vim.cmd("doautocmd User SimplyFileStateChange")
+end
+
 ---@class SimplyFile.Directory
 ---@field name string name of the directory
 ---@field absolute string absolute path of the directory

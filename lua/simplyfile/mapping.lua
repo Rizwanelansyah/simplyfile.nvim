@@ -3,12 +3,7 @@ local util = require("simplyfile.util")
 local clipboard = require("simplyfile.clipboard")
 local grid_mode = require("simplyfile.grid_mode")
 
----override field on {vim.g.simplyfile_explorer}
----@param value SimplyFile.ExplState
-function M.override_state(value)
-  vim.g.simplyfile_explorer = vim.tbl_extend("force", vim.g.simplyfile_explorer, value)
-  vim.cmd("doautocmd User SimplyFileStateChange")
-end
+M.override_state = util.override_state
 
 ---get current filter state
 ---@return fun(dir?: SimplyFile.Directory): boolean
@@ -446,6 +441,20 @@ function M.redraw(dir)
   util.buf_locks(main.buf, left.buf)
 end
 
+function M.grid_move(dir)
+  local pos = vim.g.simplyfile_explorer.grid_pos
+  local row = pos[1] + dir[1]
+  local col = pos[2] + dir[2]
+  M.override_state {
+    grid_pos = { row, col }
+  }
+  local main = vim.g.simplyfile_explorer.main
+  local dirs = vim.g.simplyfile_explorer.dirs
+  grid_mode.render(main, dirs, false)
+end
+
+---use the get_default() instead
+---@deprecated
 M.default = {
   ["<ESC>"] = function() vim.cmd("SimplyFileClose") end,
   ["<Right>"] = M.open,
@@ -469,8 +478,73 @@ M.default = {
   v = M.paste,
   V = M.paste_select,
   gc = M.go_to_cwd,
-  ["<C-]>"] = M.under_cursor_as_cwd,
-  ["<C-[>"] = M.current_path_as_cwd,
+  ["<C-u>"] = M.under_cursor_as_cwd,
+  ["<C-p>"] = M.current_path_as_cwd,
 }
+
+function M.get_default()
+  if vim.g.simplyfile_config.grid_mode then
+    return {
+      ["<ESC>"] = function() vim.cmd("SimplyFileClose") end,
+      ["<Right>"] = function() M.grid_move { 0, 1 } end,
+      ["<Left>"] = function() M.grid_move { 0, -1 } end,
+      ["<Up>"] = function() M.grid_move { -1, 0 } end,
+      ["<Down>"] = function() M.grid_move { 1, 0 } end,
+      l = function() M.grid_move { 0, 1 } end,
+      h = function() M.grid_move { 0, -1 } end,
+      k = function() M.grid_move { -1, 0 } end,
+      j = function() M.grid_move { 1, 0 } end,
+      ["<C-Left>"] = M.go_to_parent,
+      ["<C-h>"] = M.go_to_parent,
+      ["<CR>"] = M.open,
+      a = M.add,
+      r = M.rename,
+      d = M.delete,
+      s = M.search,
+      S = M.clear_search,
+      f = M.filter,
+      F = M.set_filter_to_default,
+      ["<C-f>"] = M.toggle_reverse_filter,
+      o = M.sort,
+      O = M.set_sort_to_default,
+      ["<C-o>"] = M.toggle_reverse_sort,
+      c = clipboard.copy,
+      x = clipboard.cut,
+      R = clipboard.remove_from_clipboard,
+      v = M.paste,
+      V = M.paste_select,
+      gc = M.go_to_cwd,
+      ["<C-u>"] = M.under_cursor_as_cwd,
+      ["<C-p>"] = M.current_path_as_cwd,
+    }
+  else
+    return {
+      ["<ESC>"] = function() vim.cmd("SimplyFileClose") end,
+      ["<Right>"] = M.open,
+      ["<Left>"] = M.go_to_parent,
+      l = M.open,
+      h = M.go_to_parent,
+      a = M.add,
+      r = M.rename,
+      d = M.delete,
+      s = M.search,
+      S = M.clear_search,
+      f = M.filter,
+      F = M.set_filter_to_default,
+      ["<C-f>"] = M.toggle_reverse_filter,
+      o = M.sort,
+      O = M.set_sort_to_default,
+      ["<C-o>"] = M.toggle_reverse_sort,
+      c = clipboard.copy,
+      x = clipboard.cut,
+      R = clipboard.remove_from_clipboard,
+      v = M.paste,
+      V = M.paste_select,
+      gc = M.go_to_cwd,
+      ["<C-u>"] = M.under_cursor_as_cwd,
+      ["<C-p>"] = M.current_path_as_cwd,
+    }
+  end
+end
 
 return M
