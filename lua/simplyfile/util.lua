@@ -77,7 +77,6 @@ function M.dirs(path)
           hl = hl,
           filetype = filetype,
         })
-
       else
         table.insert(files, {
           name = name,
@@ -194,10 +193,10 @@ end
 ---@return string
 function M.sanitize(str)
   str = str
-    :gsub('\\','\\\\')
-    :gsub('"', '\\"')
-    :gsub("'", "\\'")
-    :gsub(" ", "\\ ")
+      :gsub('\\', '\\\\')
+      :gsub('"', '\\"')
+      :gsub("'", "\\'")
+      :gsub(" ", "\\ ")
   return str
 end
 
@@ -210,6 +209,29 @@ function M.matches(str, patterns)
     if str:match(pat) then return true end
   end
   return false
+end
+
+---centerize or cut the text
+---@param text string
+---@param len integer
+---@return string
+function M.text_center(text, len)
+  local txt = text
+  local left = true
+  local curlen = #txt
+  while curlen < len do
+    if left then
+      txt = " " .. txt
+    else
+      txt = txt .. " "
+    end
+    curlen = curlen + 1
+    left = not left
+  end
+  if #txt > len then
+    txt = txt:sub(1, len - 3) .. "..."
+  end
+  return txt
 end
 
 return M

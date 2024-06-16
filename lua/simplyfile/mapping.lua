@@ -1,6 +1,7 @@
 local M = {}
 local util = require("simplyfile.util")
 local clipboard = require("simplyfile.clipboard")
+local grid_mode = require("simplyfile.grid_mode")
 
 ---override field on {vim.g.simplyfile_explorer}
 ---@param value SimplyFile.ExplState
@@ -383,23 +384,30 @@ function M.reload_main(dir)
   local main = vim.g.simplyfile_explorer.main
   local dirs = vim.g.simplyfile_explorer.dirs
   util.buf_unlocks(main.buf)
-  vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
-  vim.api.nvim_buf_set_lines(main.buf, 0, -1, false, { "" })
-  for c, d in ipairs(dirs) do
-    vim.api.nvim_buf_set_lines(main.buf, c - 1, c, false, { "  " .. d.icon .. " " .. d.name })
-    vim.api.nvim_buf_add_highlight(main.buf, 0, d.hl, c - 1, 0, 5)
-    local method = clipboard.get_method(d)
-    if method then
-      local hl
-      if method == "cut" then
-        hl = "SimplyFileCutMark"
-      elseif method == 'copy' then
-        hl = "SimplyFileCopyMark"
+
+  if vim.g.simplyfile_config.grid_mode.enabled then
+    vim.schedule(function()
+      grid_mode.render(main, dirs)
+    end)
+  else
+    vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
+    vim.api.nvim_buf_set_lines(main.buf, 0, -1, false, { "" })
+    for c, d in ipairs(dirs) do
+      vim.api.nvim_buf_set_lines(main.buf, c - 1, c, false, { "  " .. d.icon .. " " .. d.name })
+      vim.api.nvim_buf_add_highlight(main.buf, 0, d.hl, c - 1, 0, 5)
+      local method = clipboard.get_method(d)
+      if method then
+        local hl
+        if method == "cut" then
+          hl = "SimplyFileCutMark"
+        elseif method == 'copy' then
+          hl = "SimplyFileCopyMark"
+        end
+        vim.api.nvim_buf_add_highlight(main.buf, 0, hl, c - 1, 5, -1)
       end
-      vim.api.nvim_buf_add_highlight(main.buf, 0, hl, c - 1, 5, -1)
-    end
-    if dir and d.absolute == dir.absolute then
-      vim.api.nvim_win_set_cursor(main.win, { c, 0 })
+      if dir and d.absolute == dir.absolute then
+        vim.api.nvim_win_set_cursor(main.win, { c, 0 })
+      end
     end
   end
 

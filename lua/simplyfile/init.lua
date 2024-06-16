@@ -9,6 +9,7 @@ local comp = require("simplyfile.components")
 ---@alias border_style "double" | "single" | "none" | "solid" | "rounded" | "shadow" | string[] | string[][]
 ---@alias SimplyFile.Show boolean | fun(dir: SimplyFile.Directory): boolean
 
+---@alias SimplyFile.GridModeOpts { fallback_image: string, gap?: integer, size?: integer, padding?: integer, icon_path: (fun(dir: SimplyFile.Directory): string), enabled?: boolean }
 ---@alias SimplyFile.ClipboardOpts { notify?: boolean }
 ---@alias SimplyFile.PreviewOpts { show?: SimplyFile.Show, max_lines?: wrapped<integer>, image?: boolean, is_image?: fun(dir: SimplyFile.Directory): boolean }
 ---@alias SimplyFile.Filter table<string, fun(dir: SimplyFile.Directory): boolean>
@@ -16,7 +17,7 @@ local comp = require("simplyfile.components")
 ---@alias SimplyFile.Sort table<string, fun(a: SimplyFile.Directory, b: SimplyFile.Directory): boolean>
 ---@alias SimplyFile.DefaultSort string | fun(a: SimplyFile.Directory, b: SimplyFile.Directory): boolean
 ---@alias SimplyFile.Margin { left: wrapped<integer>, right: wrapped<integer>, down: wrapped<integer>, up: wrapped<integer>}
----@alias SimplyFile.Opts { margin?:SimplyFile.Margin, gap?: { v: wrapped<integer>, h: wrapped<integer> }, keymaps?: table<string, fun(dir: SimplyFile.Directory)>, border?: { main?: border_style, left?: border_style, right?: border_style, up?: border_style }, win_opt?: { main?: table, left?: table, right?: table, up?: table }, default_keymaps?: boolean, open_on_enter?: boolean, preview?: SimplyFile.PreviewOpts, clipboard?: SimplyFile.ClipboardOpts, filters?: SimplyFile.Filter, default_filter?: SimplyFile.DefaultFilter, sorts?: SimplyFile.Sort, default_sort?: SimplyFile.DefaultSort }
+---@alias SimplyFile.Opts { grid_mode?: SimplyFile.GridModeOpts, margin?:SimplyFile.Margin, gap?: { v: wrapped<integer>, h: wrapped<integer> }, keymaps?: table<string, fun(dir?: SimplyFile.Directory)>, border?: { main?: border_style, left?: border_style, right?: border_style, up?: border_style }, win_opt?: { main?: table, left?: table, right?: table, up?: table }, default_keymaps?: boolean, open_on_enter?: boolean, preview?: SimplyFile.PreviewOpts, clipboard?: SimplyFile.ClipboardOpts, filters?: SimplyFile.Filter, default_filter?: SimplyFile.DefaultFilter, sorts?: SimplyFile.Sort, default_sort?: SimplyFile.DefaultSort }
 
 ---@alias WinBuf { win: integer, buf: integer }
 ---@alias SimplyFile.UpBarOpts { events?: table<string, vim.api.keyset.create_autocmd>, callback?: fun(expl: SimplyFile.ExplState): table, table }
@@ -29,6 +30,12 @@ function M.setup(opts)
     default_keymaps = true,
     keymaps = {},
     gap = { h = 0, v = 0 },
+    grid_mode = {
+      enabled = false,
+      gap = 2,
+      size = 3,
+      padding = 1,
+    },
     margin = {
       left = 5,
       right = 5,
@@ -100,7 +107,7 @@ function M.setup(opts)
       end,
       image = false,
       is_image = function(dir)
-        return util.matches(dir.name, { "%.png$", "%.jpe?g$", "%.gif$", "%.webp$", "%.avif$" })
+        return util.matches(dir.name, { "%.png$", "%.jpe?g$", "%.gif$", "%.webp$", "%.avif$", "%.svg$" })
       end,
     },
     clipboard = {
@@ -207,6 +214,14 @@ end
 function M.reconfig(opts)
   vim.g.simplyfile_config = vim.tbl_deep_extend("force", vim.g.simplyfile_config, opts)
   M.reload_ui()
+end
+
+---get directory under cursor
+---@return SimplyFile.Directory?
+function M.get_dir()
+  if not vim.g.simplyfile_explorer then return end
+  local main = vim.g.simplyfile_explorer.main
+  return vim.g.simplyfile_explorer.dirs[vim.api.nvim_win_get_cursor(main.win)[1]]
 end
 
 ---open simplyfile on normalized [path]
@@ -347,7 +362,7 @@ function M.open(path)
     group = vim.g.simplyfile_explorer.group_id,
     buffer = main.buf,
     callback = function()
-      local dir = vim.g.simplyfile_explorer.dirs[vim.api.nvim_win_get_cursor(main.win)[1]]
+      local dir = M.get_dir()
       if dir then
         vim.schedule(function()
           util.buf_unlocks(right.buf)
@@ -428,8 +443,7 @@ function M.open(path)
     pattern = "SimplyFileClipboardChange",
     callback = function()
       if not vim.g.simplyfile_explorer then return end
-      local win = vim.g.simplyfile_explorer.main.win
-      mapping.redraw(vim.g.simplyfile_explorer.dirs[vim.api.nvim_win_get_cursor(win)[1]] or { absolute = "" })
+      mapping.redraw(M.get_dir() or { absolute = "" })
     end
   })
 
@@ -443,7 +457,7 @@ function M.open(path)
     for lhs, rhs in pairs(mapping.default) do
       vim.api.nvim_buf_set_keymap(main.buf, 'n', lhs, "", {
         callback = function()
-          rhs(vim.g.simplyfile_explorer.dirs[vim.api.nvim_win_get_cursor(main.win)[1]])
+          rhs(M.get_dir())
         end,
       })
     end
@@ -453,7 +467,7 @@ function M.open(path)
     for lhs, rhs in pairs(vim.g.simplyfile_config.keymaps) do
       vim.api.nvim_buf_set_keymap(main.buf, 'n', lhs, '', {
         callback = function()
-          rhs(vim.g.simplyfile_explorer.dirs[vim.api.nvim_win_get_cursor(main.win)[1]])
+          rhs(M.get_dir())
         end,
       })
     end
@@ -527,14 +541,27 @@ function M.reload_ui()
         for _, img in ipairs(images) do
           local new_img = require("image").from_file(img.path, { window = right.win, buffer = right.buf })
           img:clear()
-          new_img:render()
+          if new_img then
+            new_img:render()
+          end
         end
       end)
     end
   end
+  if vim.g.simplyfile_config.grid_mode.enabled then
+    mapping.reload_main({ absolute = "" })
+  end
 end
 
 function M.close()
+  local timer = vim.uv.new_timer()
+  timer:start(0, 0, vim.schedule_wrap(function()
+    for _, img in ipairs(require("image").get_images()) do
+      if img.namespace == "simplyfile_image" then
+        img:clear()
+      end
+    end
+  end))
   if vim.g.simplyfile_explorer then
     local draw_image = vim.g.simplyfile_config.preview.preview_image
     if draw_image then
