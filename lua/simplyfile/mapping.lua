@@ -5,6 +5,30 @@ local grid_mode = require("simplyfile.grid_mode")
 
 M.override_state = util.override_state
 
+function M.next()
+  local pos = vim.api.nvim_win_get_cursor(0)
+  local len = #vim.g.simplyfile_explorer.dirs
+  if vim.g.simplyfile_config.grid_mode.enabled then
+    local gpos = vim.g.simplyfile_explorer.grid_pos
+    local maxcol = vim.g.simplyfile_explorer.grid_cols
+    local dirs = vim.g.simplyfile_explorer.dirs
+    if gpos[2] + 1 > maxcol then
+      if gpos[1] < math.ceil(#dirs / maxcol) then
+        gpos[1] = gpos[1] + 1
+        gpos[2] = 1
+      end
+    else
+      gpos[2] = gpos[2] + 1
+    end
+    util.override_state {
+      grid_pos = gpos
+    }
+    grid_mode.render(vim.g.simplyfile_explorer.main, dirs)
+  else
+    vim.api.nvim_win_set_cursor(0, { pos[1] == len and pos[1] or pos[1] + 1, 0 })
+  end
+end
+
 ---get current filter state
 ---@return fun(dir?: SimplyFile.Directory): boolean
 function M.get_filter()
@@ -382,7 +406,7 @@ function M.reload_main(dir)
 
   if vim.g.simplyfile_config.grid_mode.enabled then
     vim.schedule(function()
-      grid_mode.render(main, dirs, true, dir)
+      grid_mode.render(main, dirs, true, dir, true)
     end)
     M.preview(M.get_dir())
   else
@@ -424,12 +448,17 @@ function M.redraw(dir)
   vim.api.nvim_buf_set_lines(left.buf, 0, -1, false, { "" })
   local parent_path = vim.fs.dirname(path)
   local parent_dirs = util.dirs(parent_path)
-  for i, d in ipairs(parent_dirs) do
-    vim.api.nvim_buf_set_lines(left.buf, i - 1, i, false, { "  " .. d.icon .. " " .. d.name })
-    vim.api.nvim_buf_add_highlight(left.buf, 0, d.hl, i - 1, 0, 5)
-    if d.absolute == path then
-      vim.api.nvim_buf_add_highlight(left.buf, 0, "CursorLine", i - 1, 0, -1)
-      vim.api.nvim_win_set_cursor(left.win, { i, 0 })
+  if vim.g.simplyfile_config.grid_mode.enabled then
+    ---@diagnostic disable-next-line: missing-fields
+    grid_mode.render(left, parent_dirs, true, { absolute = path }, true)
+  else
+    for i, d in ipairs(parent_dirs) do
+      vim.api.nvim_buf_set_lines(left.buf, i - 1, i, false, { "  " .. d.icon .. " " .. d.name })
+      vim.api.nvim_buf_add_highlight(left.buf, 0, d.hl, i - 1, 0, 5)
+      if d.absolute == path then
+        vim.api.nvim_buf_add_highlight(left.buf, 0, "CursorLine", i - 1, 0, -1)
+        vim.api.nvim_win_set_cursor(left.win, { i, 0 })
+      end
     end
   end
 
@@ -531,9 +560,13 @@ function M.preview(dir)
           buf = right.buf
         })
         local cur_dirs = util.dirs(dir.absolute)
+        if vim.g.simplyfile_config.grid_mode.enabled then
+          grid_mode.render(right, cur_dirs, true, nil, false)
+        else
         for c, dir in ipairs(cur_dirs) do
           vim.api.nvim_buf_set_lines(right.buf, c - 1, c, false, { "  " .. dir.icon .. " " .. dir.name })
           vim.api.nvim_buf_add_highlight(right.buf, 0, dir.hl, c - 1, 0, 5)
+        end
         end
       else
         if (not draw_image) or (not vim.g.simplyfile_config.preview.is_image(dir)) then
@@ -604,7 +637,7 @@ M.default = {
 }
 
 function M.get_default()
-  if vim.g.simplyfile_config.grid_mode then
+  if vim.g.simplyfile_config.grid_mode.enabled then
     return {
       ["<ESC>"] = function() vim.cmd("SimplyFileClose") end,
       ["<Right>"] = function() M.grid_move { 0, 1 } end,
@@ -629,9 +662,18 @@ function M.get_default()
       o = M.sort,
       O = M.set_sort_to_default,
       ["<C-o>"] = M.toggle_reverse_sort,
-      c = clipboard.copy,
-      x = clipboard.cut,
-      R = clipboard.remove_from_clipboard,
+      c = function(dir)
+        clipboard.copy(dir)
+        M.next()
+      end,
+      x = function(dir)
+        clipboard.cut(dir)
+        M.next()
+      end,
+      R = function(dir)
+        clipboard.remove_from_clipboard(dir)
+        M.next()
+      end,
       v = M.paste,
       V = M.paste_select,
       gc = M.go_to_cwd,

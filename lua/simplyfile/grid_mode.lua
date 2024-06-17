@@ -1,23 +1,29 @@
 local M = {}
 local image = require("image")
 local util = require("simplyfile.util")
+local clip = require("simplyfile.clipboard")
 
 M.images = {}
 
 ---render grid mode view on {main}
----@param main { buf: integer, win: integer }
+---@param ui { buf: integer, win: integer }
 ---@param dirs SimplyFile.Directory[]
 ---@param reload_image? boolean
 ---@param cursor_on? SimplyFile.Directory
-function M.render(main, dirs, reload_image, cursor_on)
+---@param show_selected? boolean
+function M.render(ui, dirs, reload_image, cursor_on, show_selected)
   if reload_image == nil then
     reload_image = true
   end
-  vim.wo[main.win].cursorline = false
+  if show_selected == nil then
+    show_selected = true
+  end
+  M.images[ui.win] = M.images[ui.win] or {}
+  vim.wo[ui.win].cursorline = false
 
   local get_icon = vim.g.simplyfile_config.grid_mode.get_icon
   local sel = vim.g.simplyfile_explorer.grid_pos
-  local mconf = vim.api.nvim_win_get_config(main.win)
+  local mconf = vim.api.nvim_win_get_config(ui.win)
   local size = vim.g.simplyfile_config.grid_mode.size
   local gap = vim.g.simplyfile_config.grid_mode.gap
   local ipad = vim.g.simplyfile_config.grid_mode.icon_padding * 2
@@ -34,10 +40,18 @@ function M.render(main, dirs, reload_image, cursor_on)
   local index_start = vim.g.simplyfile_explorer.grid_page
 
   local ns = vim.api.nvim_create_namespace("SimplyFileGridMode")
-  vim.api.nvim_buf_clear_namespace(main.buf, ns, 0, -1)
-  util.buf_unlocks(main.buf)
+  vim.api.nvim_buf_clear_namespace(ui.buf, ns, 0, -1)
+  util.buf_unlocks(ui.buf)
   for i = 1, mconf.height * 2 do
-    vim.api.nvim_buf_set_lines(main.buf, i - 1, i, false, { ((" "):rep(mconf.width * 3)) })
+    vim.api.nvim_buf_set_lines(ui.buf, i - 1, i, false, { ((" "):rep(mconf.width * 3)) })
+  end
+
+  local pos = ((sel[1] - 1) * xmax) + sel[2]
+  if pos > #dirs then
+    sel[2] = #dirs % xmax
+    if sel[2] == 0 then
+      sel[2] = xmax
+    end
   end
 
   if cursor_on then
@@ -67,7 +81,7 @@ function M.render(main, dirs, reload_image, cursor_on)
   end
 
   if reload_image then
-    for _, img in ipairs(M.images) do
+    for _, img in ipairs(M.images[ui.win]) do
       vim.schedule(function()
         img:clear()
       end)
@@ -99,7 +113,7 @@ function M.render(main, dirs, reload_image, cursor_on)
     if type(icon) == "string" then
       local img = image.from_file(icon, config)
       if img then
-        table.insert(M.images, img)
+        table.insert(M.images[ui.win], img)
       else
         err = true
       end
@@ -117,15 +131,15 @@ function M.render(main, dirs, reload_image, cursor_on)
         local col_end = col_start + (size * 2)
         local text = util.text_center(icon[i - posoff] or "", col_end - col_start)
         local ypos = y + i + (ipad / 2) - 1
-        vim.api.nvim_buf_set_text(main.buf, ypos, col_start, ypos, col_end, { text })
-        vim.api.nvim_buf_add_highlight(main.buf, ns, hl --[[@as string]], ypos, col_start, col_end)
+        vim.api.nvim_buf_set_text(ui.buf, ypos, col_start, ypos, col_end, { text })
+        vim.api.nvim_buf_add_highlight(ui.buf, ns, hl --[[@as string]], ypos, col_start, col_end)
       end
     end
     if err then
       if reload_image and type(fallback) == "string" then
         local img = image.from_file(fallback, config)
         if img then
-          table.insert(M.images, img)
+          table.insert(M.images[ui.win], img)
           vim.schedule(function()
             img:render()
           end)
@@ -139,21 +153,29 @@ function M.render(main, dirs, reload_image, cursor_on)
           local col_end = col_start + (size * 2)
           local text = util.text_center(fallback[i - posoff] or "", col_end - col_start)
           local ypos = y + i + (ipad / 2) - 1
-          vim.api.nvim_buf_set_text(main.buf, ypos, col_start, ypos, col_end, { text })
-          vim.api.nvim_buf_add_highlight(main.buf, ns, hl --[[@as string]], ypos, col_start, col_end)
+          vim.api.nvim_buf_set_text(ui.buf, ypos, col_start, ypos, col_end, { text })
+          vim.api.nvim_buf_add_highlight(ui.buf, ns, hl --[[@as string]], ypos, col_start, col_end)
         end
       end
     end
 
     local col_end = x + (size * 2 + (ipad * 2))
-    vim.api.nvim_buf_set_text(main.buf, y + size + ipad, x, y + size + ipad, col_end, {
+    vim.api.nvim_buf_set_text(ui.buf, y + size + ipad, x, y + size + ipad, col_end, {
       util.text_center(value.name, col_end - x)
     })
 
-    if row == sel[1] and col == sel[2] then
+    if show_selected and row == sel[1] and col == sel[2] then
       for i = y, y + size + ipad do
-        vim.api.nvim_buf_add_highlight(main.buf, ns, "CursorLine", i, x, col_end
-        )
+        vim.api.nvim_buf_add_highlight(ui.buf, ns, "CursorLine", i, x, col_end)
+      end
+    end
+
+    local method = clip.get_method(value)
+    if method then
+      if method == 'copy' then
+        vim.api.nvim_buf_add_highlight(ui.buf, ns, "SimplyFileCopyMark", y + size + ipad, x, col_end)
+      elseif method == 'cut' then
+        vim.api.nvim_buf_add_highlight(ui.buf, ns, "SimplyFileCutMark", y + size + ipad, x, col_end)
       end
     end
 
@@ -175,12 +197,14 @@ function M.render(main, dirs, reload_image, cursor_on)
     end
     ::next::
   end
-  util.override_state {
-    grid_pos = sel,
-    grid_cols = xmax,
-    grid_page = index_start,
-  }
-  util.buf_locks(main.buf)
+  if vim.g.simplyfile_explorer.main.win == ui.win then
+    util.override_state {
+      grid_pos = sel,
+      grid_cols = xmax,
+      grid_page = index_start,
+    }
+  end
+  util.buf_locks(ui.buf)
 end
 
 return M

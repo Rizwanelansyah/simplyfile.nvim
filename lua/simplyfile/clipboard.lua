@@ -40,7 +40,9 @@ function M.remove_from_clipboard(dir)
       vim.cmd("doautocmd User SimplyFileClipboardChange")
       local pos = vim.api.nvim_win_get_cursor(0)
       local len = #vim.g.simplyfile_explorer.dirs
-      vim.api.nvim_win_set_cursor(0, { pos[1] == len and pos[1] or pos[1] + 1, 0 })
+      if not vim.g.simplyfile_config.grid_mode.enabled then
+        vim.api.nvim_win_set_cursor(0, { pos[1] == len and pos[1] or pos[1] + 1, 0 })
+      end
       return
     end
   end
@@ -63,7 +65,9 @@ function M.copy(dir)
   vim.cmd("doautocmd User SimplyFileClipboardChange")
   local pos = vim.api.nvim_win_get_cursor(0)
   local len = #vim.g.simplyfile_explorer.dirs
-  vim.api.nvim_win_set_cursor(0, { pos[1] == len and pos[1] or pos[1] + 1, 0 })
+  if not vim.g.simplyfile_config.grid_mode.enabled then
+    vim.api.nvim_win_set_cursor(0, { pos[1] == len and pos[1] or pos[1] + 1, 0 })
+  end
   if vim.g.simplyfile_config.clipboard.notify then
     vim.notify("copy " .. dir.name .. " added to clipboard")
   end
@@ -78,7 +82,9 @@ function M.cut(dir)
   vim.cmd("doautocmd User SimplyFileClipboardChange")
   local pos = vim.api.nvim_win_get_cursor(0)
   local len = #vim.g.simplyfile_explorer.dirs
-  vim.api.nvim_win_set_cursor(0, { pos[1] == len and pos[1] or pos[1] + 1, 0 })
+  if not vim.g.simplyfile_config.grid_mode.enabled then
+    vim.api.nvim_win_set_cursor(0, { pos[1] == len and pos[1] or pos[1] + 1, 0 })
+  end
   if vim.g.simplyfile_config.clipboard.notify then
     vim.notify("cut " .. dir.name .. " added to clipboard")
   end

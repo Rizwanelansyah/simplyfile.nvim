@@ -46,7 +46,7 @@ function M.setup(opts)
       get_icon = function(dir)
         if require("simplyfile.util").matches(dir.name, {
               "%.png$", "%.jpe?g$", "%.avif$", "%.gif$", "%.webp$",
-              "%.svg$", "%.mp[34]$",
+              "%.svg$",
             }) then
           return dir.absolute
         end
@@ -179,8 +179,6 @@ function M.setup(opts)
   local set_hl = function()
     vim.api.nvim_set_hl(0, "SimplyFileCutMark", { fg = "#CC5555" })
     vim.api.nvim_set_hl(0, "SimplyFileCopyMark", { fg = "#4095E4" })
-    vim.api.nvim_set_hl(0, "SimplyFileCutMarkGridMode", { bg = "#CC5555", fg = "black" })
-    vim.api.nvim_set_hl(0, "SimplyFileCopyMarkGridMode", { bg = "#4095E4", fg = "black" })
   end
   vim.api.nvim_create_autocmd("ColorScheme", {
     callback = set_hl,
@@ -245,8 +243,13 @@ end
 ---override config option and reload the ui if opened
 ---@param opts SimplyFile.Opts
 function M.reconfig(opts)
+  local path
+  if vim.g.simplyfile_explorer then
+    path = vim.g.simplyfile_explorer.path
+    M.close()
+  end
   vim.g.simplyfile_config = vim.tbl_deep_extend("force", vim.g.simplyfile_config, opts)
-  M.reload_ui()
+  M.open(path)
 end
 
 ---open simplyfile on normalized [path]
@@ -395,21 +398,40 @@ function M.open(path)
         vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
       end
     })
+
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "SimplyFileClipboardChange",
+      group = vim.g.simplyfile_explorer.group_id,
+      callback = function()
+        if not vim.g.simplyfile_explorer then return end
+        grid_mode.render(main, vim.g.simplyfile_explorer.dirs, false, nil, false)
+      end
+    })
+
+    vim.api.nvim_create_autocmd("BufEnter", {
+      group = vim.g.simplyfile_explorer.group_id,
+      buffer = main.buf,
+      callback = function()
+        if not vim.g.simplyfile_explorer then return end
+        grid_mode.render(main, vim.g.simplyfile_explorer.dirs, false)
+      end
+    })
   else
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "SimplyFileClipboardChange",
+      group = vim.g.simplyfile_explorer.group_id,
+      callback = function()
+        if not vim.g.simplyfile_explorer then return end
+        mapping.redraw(mapping.get_dir() or { absolute = "" })
+      end
+    })
+
     vim.api.nvim_create_autocmd("CursorMoved", {
       group = vim.g.simplyfile_explorer.group_id,
       buffer = main.buf,
       callback = function()
         local dir = mapping.get_dir()
         mapping.preview(dir)
-      end
-    })
-
-    vim.api.nvim_create_autocmd("User", {
-      pattern = "SimplyFileClipboardChange",
-      callback = function()
-        if not vim.g.simplyfile_explorer then return end
-        mapping.redraw(mapping.get_dir() or { absolute = "" })
       end
     })
   end
@@ -530,8 +552,10 @@ end
 function M.close()
   local timer = vim.uv.new_timer()
   timer:start(0, 0, vim.schedule_wrap(function()
-    for _, img in ipairs(grid_mode.images) do
-      img:clear()
+    for _, images in pairs(grid_mode.images) do
+      for _, img in ipairs(images) do
+        img:clear()
+      end
     end
   end))
   if vim.g.simplyfile_explorer then
