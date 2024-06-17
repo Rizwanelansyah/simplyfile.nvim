@@ -225,7 +225,7 @@ end
 function M.text_center(text, len)
   local txt = text
   local left = true
-  local curlen = #txt
+  local curlen = vim.fn.strchars(txt)
   while curlen < len do
     if left then
       txt = " " .. txt
@@ -235,8 +235,8 @@ function M.text_center(text, len)
     curlen = curlen + 1
     left = not left
   end
-  if #txt > len then
-    txt = txt:sub(1, len - 3) .. "..."
+  if vim.fn.strchars(txt) > len then
+    txt = txt:sub(1, len)
   end
   return txt
 end

@@ -2,6 +2,7 @@ local M = {}
 local util = require("simplyfile.util")
 local mapping = require("simplyfile.mapping")
 local comp = require("simplyfile.components")
+local grid_mode = require("simplyfile.grid_mode")
 
 ---@generic T
 ---@alias wrapped T | fun(): T
@@ -9,7 +10,7 @@ local comp = require("simplyfile.components")
 ---@alias border_style "double" | "single" | "none" | "solid" | "rounded" | "shadow" | string[] | string[][]
 ---@alias SimplyFile.Show boolean | fun(dir: SimplyFile.Directory): boolean
 
----@alias SimplyFile.GridModeOpts { fallback_image: string, icon_padding?: integer, gap?: integer, size?: integer, padding?: integer, icon_path: (fun(dir: SimplyFile.Directory): string), enabled?: boolean }
+---@alias SimplyFile.GridModeOpts { fallback?: string|[string[], string], icon_padding?: integer, gap?: integer, size?: integer, padding?: integer, get_icon?: (fun(dir: SimplyFile.Directory): string|string[][]), enabled?: boolean }
 ---@alias SimplyFile.ClipboardOpts { notify?: boolean }
 ---@alias SimplyFile.PreviewOpts { show?: SimplyFile.Show, max_lines?: wrapped<integer>, image?: boolean, is_image?: fun(dir: SimplyFile.Directory): boolean }
 ---@alias SimplyFile.Filter table<string, fun(dir: SimplyFile.Directory): boolean>
@@ -21,7 +22,7 @@ local comp = require("simplyfile.components")
 
 ---@alias WinBuf { win: integer, buf: integer }
 ---@alias SimplyFile.UpBarOpts { events?: table<string, vim.api.keyset.create_autocmd>, callback?: fun(expl: SimplyFile.ExplState): table, table }
----@alias SimplyFile.ExplState { grid_cols: integer,  grid_pos: integer[], left: WinBuf, main: WinBuf, right: WinBuf, up: WinBuf, dirs: SimplyFile.Directory[], path: string, group_id: integer, search: string, filter: SimplyFile.DefaultFilter, reverse_filter: boolean, sort: SimplyFile.DefaultSort, reverse_sort: boolean, up_bar?: SimplyFile.UpBarOpts }
+---@alias SimplyFile.ExplState { grid_page: integer, grid_cols: integer,  grid_pos: integer[], left: WinBuf, main: WinBuf, right: WinBuf, up: WinBuf, dirs: SimplyFile.Directory[], path: string, group_id: integer, search: string, filter: SimplyFile.DefaultFilter, reverse_filter: boolean, sort: SimplyFile.DefaultSort, reverse_sort: boolean, up_bar?: SimplyFile.UpBarOpts }
 
 ---setup the simplyfile plugin
 ---@param opts SimplyFile.Opts?
@@ -33,9 +34,38 @@ function M.setup(opts)
     grid_mode = {
       enabled = false,
       gap = 1,
-      size = 3,
+      size = 4,
       padding = 1,
       icon_padding = 1,
+      fallback = { {
+        [[ .----. ]],
+        [[ `    | ]],
+        [[    .-` ]],
+        [[    |   ]],
+      }, "ErrorMsg" },
+      get_icon = function(dir)
+        if require("simplyfile.util").matches(dir.name, {
+              "%.png$", "%.jpe?g$", "%.avif$", "%.gif$", "%.webp$",
+              "%.svg$", "%.mp[34]$",
+            }) then
+          return dir.absolute
+        end
+        if dir.is_folder then
+          return { {
+            [[+---.__ ]],
+            [[|      |]],
+            [[| ____ |]],
+            [['------']],
+          }, "Directory" }
+        else
+          return { {
+            [[ +---.  ]],
+            [[ | -- | ]],
+            [[ | -- | ]],
+            [[ '----' ]],
+          }, "Normal" }
+        end
+      end
     },
     margin = {
       left = 5,
@@ -351,6 +381,7 @@ function M.open(path)
     grid_pos = { 1, 1 },
     grid_cols = 1,
     grid_selected = nil,
+    grid_page = 1,
   }
 
   ---@diagnostic disable-next-line: missing-fields
@@ -499,10 +530,8 @@ end
 function M.close()
   local timer = vim.uv.new_timer()
   timer:start(0, 0, vim.schedule_wrap(function()
-    for _, img in ipairs(require("image").get_images()) do
-      if img.namespace == "simplyfile_image" then
-        img:clear()
-      end
+    for _, img in ipairs(grid_mode.images) do
+      img:clear()
     end
   end))
   if vim.g.simplyfile_explorer then

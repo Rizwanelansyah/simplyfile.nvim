@@ -384,6 +384,7 @@ function M.reload_main(dir)
     vim.schedule(function()
       grid_mode.render(main, dirs, true, dir)
     end)
+    M.preview(M.get_dir())
   else
     vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
     vim.api.nvim_buf_set_lines(main.buf, 0, -1, false, { "" })
