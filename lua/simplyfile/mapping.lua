@@ -536,6 +536,10 @@ function M.preview(dir)
   if not vim.g.simplyfile_explorer then return end
   local right = vim.g.simplyfile_explorer.right
   if dir then
+    if vim.api.nvim_buf_get_name(right.buf) == "/tmp/preview/" .. dir.absolute then
+      return
+    end
+    vim.api.nvim_buf_set_name(right.buf, "/tmp/preview/" .. dir.absolute)
     vim.schedule(function()
       util.buf_unlocks(right.buf)
       local draw_image = vim.g.simplyfile_config.preview.image
@@ -563,10 +567,10 @@ function M.preview(dir)
         if vim.g.simplyfile_config.grid_mode.enabled then
           grid_mode.render(right, cur_dirs, true, nil, false)
         else
-        for c, dir in ipairs(cur_dirs) do
-          vim.api.nvim_buf_set_lines(right.buf, c - 1, c, false, { "  " .. dir.icon .. " " .. dir.name })
-          vim.api.nvim_buf_add_highlight(right.buf, 0, dir.hl, c - 1, 0, 5)
-        end
+          for c, dir in ipairs(cur_dirs) do
+            vim.api.nvim_buf_set_lines(right.buf, c - 1, c, false, { "  " .. dir.icon .. " " .. dir.name })
+            vim.api.nvim_buf_add_highlight(right.buf, 0, dir.hl, c - 1, 0, 5)
+          end
         end
       else
         if (not draw_image) or (not vim.g.simplyfile_config.preview.is_image(dir)) then

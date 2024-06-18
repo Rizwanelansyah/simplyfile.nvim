@@ -42,8 +42,8 @@ function M.render(ui, dirs, reload_image, cursor_on, show_selected)
   local ns = vim.api.nvim_create_namespace("SimplyFileGridMode")
   vim.api.nvim_buf_clear_namespace(ui.buf, ns, 0, -1)
   util.buf_unlocks(ui.buf)
-  for i = 1, mconf.height * 2 do
-    vim.api.nvim_buf_set_lines(ui.buf, i - 1, i, false, { ((" "):rep(mconf.width * 3)) })
+  for i = 1, mconf.height do
+    vim.api.nvim_buf_set_lines(ui.buf, i - 1, i, false, { ((" "):rep(mconf.width)) })
   end
 
   local pos = ((sel[1] - 1) * xmax) + sel[2]
