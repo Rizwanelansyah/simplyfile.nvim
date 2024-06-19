@@ -18,6 +18,23 @@ function M.override_state(value)
   vim.cmd("doautocmd User SimplyFileStateChange")
 end
 
+---check is the grid mode enabled
+---@param path string current explorer absolute path
+---@param dirs SimplyFile.Directory[] all directories on explorer
+---@return true|false
+function M.is_grid_mode(path, dirs)
+  local mode = vim.g.simplyfile_config.grid_mode.mode
+  local cond = vim.g.simplyfile_config.grid_mode.condition
+  return mode == "on" or (mode == "auto" and M.callget(cond, {
+    icon = "",
+    hl = "Directory",
+    name = vim.fs.basename(path),
+    absolute = path,
+    filetype = "directory",
+    is_folder = true,
+  }, dirs))
+end
+
 ---@class SimplyFile.Directory
 ---@field name string name of the directory
 ---@field absolute string absolute path of the directory

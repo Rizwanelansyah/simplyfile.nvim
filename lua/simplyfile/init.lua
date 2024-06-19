@@ -10,7 +10,8 @@ local grid_mode = require("simplyfile.grid_mode")
 ---@alias border_style "double" | "single" | "none" | "solid" | "rounded" | "shadow" | string[] | string[][]
 ---@alias SimplyFile.Show boolean | fun(dir: SimplyFile.Directory): boolean
 
----@alias SimplyFile.GridModeOpts { fallback?: string|[string[], string], icon_padding?: integer, gap?: integer, size?: integer, padding?: integer, get_icon?: (fun(dir: SimplyFile.Directory): string|string[][]), enabled?: boolean }
+---@alias SimplyFile.modes "on"|"off"|"auto"
+---@alias SimplyFile.GridModeOpts { condition?: (fun(dir: SimplyFile.Directory, dirs: SimplyFile.Directory[]): boolean), mode?: SimplyFile.modes, fallback?: string|[string[], string], icon_padding?: integer, gap?: integer, size?: integer, padding?: integer, get_icon?: (fun(dir: SimplyFile.Directory): string|string[][]), enabled?: boolean }
 ---@alias SimplyFile.ClipboardOpts { notify?: boolean }
 ---@alias SimplyFile.PreviewOpts { show?: SimplyFile.Show, max_lines?: wrapped<integer>, image?: boolean, is_image?: fun(dir: SimplyFile.Directory): boolean }
 ---@alias SimplyFile.Filter table<string, fun(dir: SimplyFile.Directory): boolean>
@@ -24,6 +25,7 @@ local grid_mode = require("simplyfile.grid_mode")
 ---@alias SimplyFile.UpBarOpts { events?: table<string, vim.api.keyset.create_autocmd>, callback?: fun(expl: SimplyFile.ExplState): table, table }
 ---@alias SimplyFile.ExplState { grid_page: integer, grid_cols: integer,  grid_pos: integer[], left: WinBuf, main: WinBuf, right: WinBuf, up: WinBuf, dirs: SimplyFile.Directory[], path: string, group_id: integer, search: string, filter: SimplyFile.DefaultFilter, reverse_filter: boolean, sort: SimplyFile.DefaultSort, reverse_sort: boolean, up_bar?: SimplyFile.UpBarOpts }
 
+local renderable = { "%.png$", "%.jpe?g$", "%.avif$", "%.gif$", "%.webp$", "%.svg$", }
 ---setup the simplyfile plugin
 ---@param opts SimplyFile.Opts?
 function M.setup(opts)
@@ -33,6 +35,18 @@ function M.setup(opts)
     gap = { h = 0, v = 0 },
     grid_mode = {
       enabled = false,
+      mode = "on",
+      condition = function(_, dirs)
+        local count = 0
+        for _, dir in ipairs(dirs) do
+          if count > 2 then
+            return true
+          elseif util.matches(dir.name, renderable) then
+            count = count + 1
+          end
+        end
+        return count > 2
+      end,
       gap = 1,
       size = 4,
       padding = 1,
@@ -44,10 +58,7 @@ function M.setup(opts)
         [[    |   ]],
       }, "ErrorMsg" },
       get_icon = function(dir)
-        if require("simplyfile.util").matches(dir.name, {
-              "%.png$", "%.jpe?g$", "%.avif$", "%.gif$", "%.webp$",
-              "%.svg$",
-            }) then
+        if util.matches(dir.name, renderable) then
           return dir.absolute
         end
         if dir.is_folder then
@@ -94,7 +105,6 @@ function M.setup(opts)
           pattern = "global"
         },
       },
-      -- event = "CursorMoved",
       ---@param expl SimplyFile.ExplState
       ---@return table, table
       callback = function(expl)
@@ -390,7 +400,8 @@ function M.open(path)
   ---@diagnostic disable-next-line: missing-fields
   mapping.refresh({ absolute = cursor_on })
 
-  if vim.g.simplyfile_config.grid_mode.enabled then
+  local is_grid = util.is_grid_mode(vim.g.simplyfile_explorer.path, vim.g.simplyfile_explorer.dirs)
+  if vim.g.simplyfile_config.grid_mode.enabled and is_grid then
     vim.api.nvim_create_autocmd("CursorMoved", {
       group = vim.g.simplyfile_explorer.group_id,
       buffer = main.buf,
@@ -427,13 +438,33 @@ function M.open(path)
     })
 
     vim.api.nvim_create_autocmd("CursorMoved", {
-      group = vim.g.simplyfile_explorer.group_id,
+      group = vim.g.simplyfile_explorer.mode_group_id,
       buffer = main.buf,
       callback = function()
         local dir = mapping.get_dir()
         mapping.preview(dir)
       end
     })
+  end
+
+  if vim.g.simplyfile_config.default_keymaps then
+    for lhs, rhs in pairs(mapping.get_default()) do
+      vim.api.nvim_buf_set_keymap(main.buf, 'n', lhs, "", {
+        callback = function()
+          rhs(mapping.get_dir())
+        end,
+      })
+    end
+  end
+
+  if vim.g.simplyfile_config.keymaps then
+    for lhs, rhs in pairs(vim.g.simplyfile_config.keymaps) do
+      vim.api.nvim_buf_set_keymap(vim.g.simplyfile_explorer.main.buf, 'n', lhs, '', {
+        callback = function()
+          rhs(mapping.get_dir())
+        end,
+      })
+    end
   end
 
   vim.api.nvim_create_autocmd("WinClosed", {
@@ -448,26 +479,6 @@ function M.open(path)
     buffer = main.buf,
     callback = M.reload_ui,
   })
-
-  if vim.g.simplyfile_config.default_keymaps then
-    for lhs, rhs in pairs(mapping.get_default()) do
-      vim.api.nvim_buf_set_keymap(main.buf, 'n', lhs, "", {
-        callback = function()
-          rhs(mapping.get_dir())
-        end,
-      })
-    end
-  end
-
-  if vim.g.simplyfile_config.keymaps then
-    for lhs, rhs in pairs(vim.g.simplyfile_config.keymaps) do
-      vim.api.nvim_buf_set_keymap(main.buf, 'n', lhs, '', {
-        callback = function()
-          rhs(mapping.get_dir())
-        end,
-      })
-    end
-  end
 
   local exp = vim.g.simplyfile_explorer
   util.buf_locks(exp.up.buf, exp.main.buf, exp.left.buf, exp.right.buf)
@@ -544,20 +555,19 @@ function M.reload_ui()
       end)
     end
   end
-  if vim.g.simplyfile_config.grid_mode.enabled then
+  local is_grid = util.is_grid_mode(vim.g.simplyfile_explorer.path, vim.g.simplyfile_explorer.dirs)
+  if vim.g.simplyfile_config.grid_mode.enabled and is_grid then
     mapping.reload_main({ absolute = "" })
   end
 end
 
 function M.close()
-  local timer = vim.uv.new_timer()
-  timer:start(0, 0, vim.schedule_wrap(function()
-    for _, images in pairs(grid_mode.images) do
-      for _, img in ipairs(images) do
-        img:clear()
-      end
+  mapping.is_last_grid = nil
+  for _, images in pairs(grid_mode.images) do
+    for _, img in ipairs(images) do
+      img:clear()
     end
-  end))
+  end
   if vim.g.simplyfile_explorer then
     local draw_image = vim.g.simplyfile_config.preview.preview_image
     if draw_image then

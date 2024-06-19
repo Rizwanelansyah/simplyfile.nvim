@@ -7,8 +7,10 @@ M.override_state = util.override_state
 
 function M.next()
   local pos = vim.api.nvim_win_get_cursor(0)
-  local len = #vim.g.simplyfile_explorer.dirs
-  if vim.g.simplyfile_config.grid_mode.enabled then
+  local dirs = vim.g.simplyfile_explorer.dirs
+  local len = #dirs
+  local path = vim.g.simplyfile_explorer.path
+  if vim.g.simplyfile_config.grid_mode.enabled and util.is_grid_mode(path, dirs) then
     local gpos = vim.g.simplyfile_explorer.grid_pos
     local maxcol = vim.g.simplyfile_explorer.grid_cols
     local dirs = vim.g.simplyfile_explorer.dirs
@@ -321,6 +323,7 @@ function M.search()
     vim.api.nvim_win_close(win, true)
     vim.api.nvim_buf_del_extmark(buf, ns, 1)
     vim.api.nvim_buf_delete(buf, { force = true })
+    vim.api.nvim_set_current_win(vim.g.simplyfile_explorer.main.win)
   end
 
   vim.api.nvim_buf_set_keymap(buf, "i", "<ESC>", "", {
@@ -331,6 +334,9 @@ function M.search()
     buffer = buf,
     callback = function()
       local input = vim.api.nvim_get_current_line()
+      if input:sub(-1, -1) == "%" and input:sub(-2, -2) ~= "%" then
+        input = input:sub(1, -2)
+      end
       M.override_state {
         search = input,
       }
@@ -402,14 +408,18 @@ end
 function M.reload_main(dir)
   local main = vim.g.simplyfile_explorer.main
   local dirs = vim.g.simplyfile_explorer.dirs
+  local path = vim.g.simplyfile_explorer.path
   util.buf_unlocks(main.buf)
 
-  if vim.g.simplyfile_config.grid_mode.enabled then
+  if vim.g.simplyfile_config.grid_mode.enabled and util.is_grid_mode(path, dirs) then
     vim.schedule(function()
       grid_mode.render(main, dirs, true, dir, true)
     end)
     M.preview(M.get_dir())
   else
+    for _, img in ipairs(grid_mode.images[main.win] or {}) do
+      img:clear()
+    end
     vim.api.nvim_win_set_cursor(main.win, { 1, 0 })
     vim.api.nvim_buf_set_lines(main.buf, 0, -1, false, { "" })
     for c, d in ipairs(dirs) do
@@ -448,7 +458,7 @@ function M.redraw(dir)
   vim.api.nvim_buf_set_lines(left.buf, 0, -1, false, { "" })
   local parent_path = vim.fs.dirname(path)
   local parent_dirs = util.dirs(parent_path)
-  if vim.g.simplyfile_config.grid_mode.enabled then
+  if vim.g.simplyfile_config.grid_mode.enabled and util.is_grid_mode(parent_path, parent_dirs) then
     ---@diagnostic disable-next-line: missing-fields
     grid_mode.render(left, parent_dirs, true, { absolute = path }, true)
   else
@@ -520,7 +530,9 @@ end
 ---@return SimplyFile.Directory?
 function M.get_dir()
   if not vim.g.simplyfile_explorer then return end
-  if vim.g.simplyfile_config.grid_mode.enabled then
+  local path = vim.g.simplyfile_explorer.path
+  local dirs = vim.g.simplyfile_explorer.dirs
+  if vim.g.simplyfile_config.grid_mode.enabled and util.is_grid_mode(path, dirs) then
     local pos = vim.g.simplyfile_explorer.grid_pos
     local maxcol = vim.g.simplyfile_explorer.grid_cols
     return vim.g.simplyfile_explorer.dirs[(pos[1] - 1) * maxcol + pos[2]]
@@ -535,6 +547,11 @@ end
 function M.preview(dir)
   if not vim.g.simplyfile_explorer then return end
   local right = vim.g.simplyfile_explorer.right
+  for _, img in ipairs(grid_mode.images[right.win] or {}) do
+    vim.schedule(function()
+      img:clear()
+    end)
+  end
   if dir then
     if vim.api.nvim_buf_get_name(right.buf) == "/tmp/preview/" .. dir.absolute then
       return
@@ -564,7 +581,7 @@ function M.preview(dir)
           buf = right.buf
         })
         local cur_dirs = util.dirs(dir.absolute)
-        if vim.g.simplyfile_config.grid_mode.enabled then
+        if vim.g.simplyfile_config.grid_mode.enabled and util.is_grid_mode(dir.absolute, cur_dirs) then
           grid_mode.render(right, cur_dirs, true, nil, false)
         else
           for c, dir in ipairs(cur_dirs) do
@@ -640,78 +657,93 @@ M.default = {
   ["<C-p>"] = M.current_path_as_cwd,
 }
 
+---get builtin keymaps
+---@return table
 function M.get_default()
-  if vim.g.simplyfile_config.grid_mode.enabled then
-    return {
-      ["<ESC>"] = function() vim.cmd("SimplyFileClose") end,
-      ["<Right>"] = function() M.grid_move { 0, 1 } end,
-      ["<Left>"] = function() M.grid_move { 0, -1 } end,
-      ["<Up>"] = function() M.grid_move { -1, 0 } end,
-      ["<Down>"] = function() M.grid_move { 1, 0 } end,
-      l = function() M.grid_move { 0, 1 } end,
-      h = function() M.grid_move { 0, -1 } end,
-      k = function() M.grid_move { -1, 0 } end,
-      j = function() M.grid_move { 1, 0 } end,
-      ["<C-Left>"] = M.go_to_parent,
-      ["<C-h>"] = M.go_to_parent,
-      ["<CR>"] = M.open,
-      a = M.add,
-      r = M.rename,
-      d = M.delete,
-      s = M.search,
-      S = M.clear_search,
-      f = M.filter,
-      F = M.set_filter_to_default,
-      ["<C-f>"] = M.toggle_reverse_filter,
-      o = M.sort,
-      O = M.set_sort_to_default,
-      ["<C-o>"] = M.toggle_reverse_sort,
-      c = function(dir)
-        clipboard.copy(dir)
-        M.next()
-      end,
-      x = function(dir)
-        clipboard.cut(dir)
-        M.next()
-      end,
-      R = function(dir)
-        clipboard.remove_from_clipboard(dir)
-        M.next()
-      end,
-      v = M.paste,
-      V = M.paste_select,
-      gc = M.go_to_cwd,
-      ["<C-u>"] = M.under_cursor_as_cwd,
-      ["<C-p>"] = M.current_path_as_cwd,
-    }
-  else
-    return {
-      ["<ESC>"] = function() vim.cmd("SimplyFileClose") end,
-      ["<Right>"] = M.open,
-      ["<Left>"] = M.go_to_parent,
-      l = M.open,
-      h = M.go_to_parent,
-      a = M.add,
-      r = M.rename,
-      d = M.delete,
-      s = M.search,
-      S = M.clear_search,
-      f = M.filter,
-      F = M.set_filter_to_default,
-      ["<C-f>"] = M.toggle_reverse_filter,
-      o = M.sort,
-      O = M.set_sort_to_default,
-      ["<C-o>"] = M.toggle_reverse_sort,
-      c = clipboard.copy,
-      x = clipboard.cut,
-      R = clipboard.remove_from_clipboard,
-      v = M.paste,
-      V = M.paste_select,
-      gc = M.go_to_cwd,
-      ["<C-u>"] = M.under_cursor_as_cwd,
-      ["<C-p>"] = M.current_path_as_cwd,
-    }
+  local function is_grid()
+    local path = vim.g.simplyfile_explorer.path
+    local dirs = vim.g.simplyfile_explorer.dirs
+    return util.is_grid_mode(path, dirs)
   end
+
+  local function right(dir)
+    if is_grid() then
+      M.grid_move { 0, 1 }
+    else
+      M.open(dir)
+    end
+  end
+
+  local function left()
+    if is_grid() then
+      M.grid_move { 0, -1 }
+    else
+      M.go_to_parent()
+    end
+  end
+
+  local function up()
+    if is_grid() then
+      M.grid_move { -1, 0 }
+    else
+      local pos = vim.api.nvim_win_get_cursor(0)
+      pos[1] = pos[1] == 1 and vim.fn.line('$') or pos[1] - 1
+      vim.api.nvim_win_set_cursor(0, pos)
+    end
+  end
+
+  local function down()
+    if is_grid() then
+      M.grid_move { 1, 0 }
+    else
+      local pos = vim.api.nvim_win_get_cursor(0)
+      pos[1] = pos[1] == vim.fn.line('$') and 1 or pos[1] + 1
+      vim.api.nvim_win_set_cursor(0, pos)
+    end
+  end
+
+  return {
+    ["<ESC>"] = function() vim.cmd("SimplyFileClose") end,
+    ["<Right>"] = right,
+    ["<Left>"] = left,
+    ["<Up>"] = up,
+    ["<Down>"] = down,
+    l = right,
+    h = left,
+    k = up,
+    j = down,
+    ["<C-Left>"] = M.go_to_parent,
+    ["<C-h>"] = M.go_to_parent,
+    ["<CR>"] = M.open,
+    a = M.add,
+    r = M.rename,
+    d = M.delete,
+    s = M.search,
+    S = M.clear_search,
+    f = M.filter,
+    F = M.set_filter_to_default,
+    ["<C-f>"] = M.toggle_reverse_filter,
+    o = M.sort,
+    O = M.set_sort_to_default,
+    ["<C-o>"] = M.toggle_reverse_sort,
+    c = function(dir)
+      clipboard.copy(dir)
+      M.next()
+    end,
+    x = function(dir)
+      clipboard.cut(dir)
+      M.next()
+    end,
+    R = function(dir)
+      clipboard.remove_from_clipboard(dir)
+      M.next()
+    end,
+    v = M.paste,
+    V = M.paste_select,
+    gc = M.go_to_cwd,
+    ["<C-u>"] = M.under_cursor_as_cwd,
+    ["<C-p>"] = M.current_path_as_cwd,
+  }
 end
 
 return M

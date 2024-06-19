@@ -4,6 +4,7 @@ local util = require("simplyfile.util")
 local clip = require("simplyfile.clipboard")
 
 M.images = {}
+M.loaded_images = {}
 
 ---render grid mode view on {main}
 ---@param ui { buf: integer, win: integer }
@@ -19,7 +20,7 @@ function M.render(ui, dirs, reload_image, cursor_on, show_selected)
     show_selected = true
   end
   M.images[ui.win] = M.images[ui.win] or {}
-  vim.wo[ui.win].cursorline = false
+  vim.api.nvim_win_set_cursor(ui.win, { 1, 0 })
 
   local get_icon = vim.g.simplyfile_config.grid_mode.get_icon
   local sel = vim.g.simplyfile_explorer.grid_pos
@@ -89,6 +90,9 @@ function M.render(ui, dirs, reload_image, cursor_on, show_selected)
   end
 
   local start = ((index_start - 1) * xmax * ymax) + 1
+  if ui.win ~= vim.g.simplyfile_explorer.main.win then
+    start = 1
+  end
   for i, value in ipairs(dirs) do
     if i < start then
       col = col + 1
@@ -111,7 +115,23 @@ function M.render(ui, dirs, reload_image, cursor_on, show_selected)
     local err = false
 
     if type(icon) == "string" then
-      local img = image.from_file(icon, config)
+      local name = ""
+      if vim.g.simplyfile_explorer.main.win == ui.win then
+        name = "main:"
+      elseif vim.g.simplyfile_explorer.left.win == ui.win then
+        name = "main:"
+      elseif vim.g.simplyfile_explorer.right.win == ui.win then
+        name = "right:"
+      end
+      ---@type Image?
+      local img
+      if M.loaded_images[name .. value.absolute] then
+        img = M.loaded_images[name .. value.absolute]
+        img.geometry = config
+      else
+        img = image.from_file(icon, config)
+        M.loaded_images[name .. value.absolute] = img
+      end
       if img then
         table.insert(M.images[ui.win], img)
       else
